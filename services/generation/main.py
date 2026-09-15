@@ -1,6 +1,7 @@
 
-from fastapi import FastAPI
-from llm_handler import LLMHandler
+from fastapi import FastAPI, HTTPException
+from fastapi.concurrency import run_in_threadpool
+from llm_handler import LLMError, LLMHandler
 from pydantic import BaseModel
 
 app = FastAPI(title="Generation Service")
@@ -20,11 +21,15 @@ class GenerateResponse(BaseModel):
 
 @app.post("/generate", response_model=GenerateResponse)
 async def generate(request: GenerateRequest):
-    answer = llm.generate(
-        query=request.query,
-        context_chunks=request.context_chunks,
-        conversation_context=request.conversation_context,
-    )
+    try:
+        answer = await run_in_threadpool(
+            llm.generate,
+            query=request.query,
+            context_chunks=request.context_chunks,
+            conversation_context=request.conversation_context,
+        )
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return GenerateResponse(answer=answer, model_used=llm.model or "none")
 
 
@@ -54,7 +59,12 @@ Chapter {request.chapter_number} text:
 
 JSON array:"""
 
-    raw = llm.generate(query=prompt, context_chunks=[], conversation_context="")
+    try:
+        raw = await run_in_threadpool(
+            llm.generate, query=prompt, context_chunks=[], conversation_context=""
+        )
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     if not raw:
         return {"characters": [], "error": "LLM unavailable"}
 

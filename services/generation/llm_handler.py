@@ -9,6 +9,14 @@ HF_GPU = int(os.environ.get("HF_GPU", "0"))  # Which GPU to use (transformers fa
 # vLLM OpenAI-compatible server (scripts/start_services.sh launches it on GPU 1)
 VLLM_URL = os.environ.get("VLLM_URL", "http://localhost:8004/v1")
 
+class LLMError(RuntimeError):
+    """Generation failed.
+
+    Raised instead of returning an error string: callers were storing
+    "Error: ..." text as if it were a real answer, and caching it.
+    """
+
+
 MAX_TOKENS = 800  # hard cap above the prompt's soft target so answers don't truncate
 TEMPERATURE = 0.3
 
@@ -123,7 +131,7 @@ Answer:""")
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"].strip()
         except Exception as e:
-            return f"Error: {e}"
+            raise LLMError(f"vLLM generation failed: {e}") from e
 
     def _transformers_generate(self, prompt: str) -> str:
         try:
@@ -147,7 +155,7 @@ Answer:""")
             generated = outputs[0][inputs["input_ids"].shape[1]:]
             return self._hf_tokenizer.decode(generated, skip_special_tokens=True).strip()
         except Exception as e:
-            return f"Error: {e}"
+            raise LLMError(f"transformers generation failed: {e}") from e
 
     def _openai_generate(self, prompt: str) -> str:
         try:
@@ -164,7 +172,7 @@ Answer:""")
             )
             return response.choices[0].message.content
         except Exception as e:
-            return f"Error: {e}"
+            raise LLMError(f"OpenAI generation failed: {e}") from e
 
     def get_available_models(self) -> dict:
         return {

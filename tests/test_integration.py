@@ -67,6 +67,24 @@ def test_summary_stays_within_the_requested_range(novel_id):
     ).json()
 
     assert "summary" in body, body
+    # Reading further than the requested range must not widen the summary
+    assert body["start_chapter"] == 100, body
+    assert body["end_chapter"] == 120, body
+
+
+def test_summary_is_clamped_to_reading_progress(novel_id):
+    body = httpx.post(
+        f"{GATEWAY}/summarize",
+        json={
+            "novel_id": novel_id,
+            "start_chapter": 100,
+            "end_chapter": 500,
+            "current_chapter": 150,
+        },
+        timeout=300,
+    ).json()
+
+    assert body["end_chapter"] == 150, body
 
 
 def test_progress_round_trips(novel_id):

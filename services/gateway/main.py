@@ -7,7 +7,7 @@ from config import (
     INGESTION_SERVICE_URL,
     RETRIEVAL_SERVICE_URL,
 )
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
@@ -255,6 +255,8 @@ async def query(request: QueryRequest):
                 "conversation_context": request.conversation_context,
             },
         )
+        if gen_resp.status_code != 200:
+            raise HTTPException(status_code=502, detail="Generation service failed")
         gen_data = gen_resp.json()
 
     with engine.connect() as conn:
@@ -290,35 +292,45 @@ class CatchMeUpRequest(BaseModel):
 
 @app.post("/summarize")
 async def summarize(request: SummarizeRequest):
-    current_ch = request.current_chapter or request.end_chapter
+    reader_at = request.current_chapter or request.end_chapter
+    # The ceiling is the tighter of "what was asked for" and "what has been
+    # read". Using reading position alone let a summary of chapters 100-120
+    # pull in everything up to the reader's position.
+    end_ch = min(request.end_chapter, reader_at)
 
-    # Check cache first
+    if request.start_chapter > end_ch:
+        return {
+            "error": (
+                f"Nothing to summarize: chapter {request.start_chapter} is past "
+                f"reading progress (chapter {reader_at})."
+            )
+        }
+
+    # Cache is keyed by novel as well as range; a range alone collides across novels.
     with engine.connect() as conn:
         cached = conn.execute(
             text("""
                 SELECT summary FROM chapter_summaries
                 WHERE novel_id = :nid AND start_chapter = :s AND end_chapter = :e
             """),
-            {"nid": request.novel_id, "s": request.start_chapter, "e": request.end_chapter},
+            {"nid": request.novel_id, "s": request.start_chapter, "e": end_ch},
         ).fetchone()
 
     if cached:
         return {
             "summary": cached[0],
             "start_chapter": request.start_chapter,
-            "end_chapter": request.end_chapter,
+            "end_chapter": end_ch,
             "cached": True,
         }
 
-    # Retrieve chunks from the chapter range
     collection_name = f"novel_{request.novel_id}"
     async with httpx.AsyncClient(timeout=120) as client:
-        # Search for content across the chapter range
         retrieval_resp = await client.post(
             f"{RETRIEVAL_SERVICE_URL}/search",
             json={
-                "query": f"summary of events in chapters {request.start_chapter} to {request.end_chapter}",
-                "current_chapter": current_ch,
+                "query": f"summary of events in chapters {request.start_chapter} to {end_ch}",
+                "current_chapter": end_ch,
                 "n_results": 10,
                 "collection_name": collection_name,
                 # floor the search to the requested range; without it,
@@ -331,13 +343,12 @@ async def summarize(request: SummarizeRequest):
         if not results:
             return {"error": "No content found for this chapter range"}
 
-        # Generate summary
         gen_resp = await client.post(
             f"{GENERATION_SERVICE_URL}/generate",
             json={
                 "query": (
                     f"Summarize the key events, character developments, and plot points "
-                    f"from chapters {request.start_chapter} to {request.end_chapter}. "
+                    f"from chapters {request.start_chapter} to {end_ch}. "
                     f"Be comprehensive but concise."
                 ),
                 "context_chunks": [
@@ -346,28 +357,30 @@ async def summarize(request: SummarizeRequest):
                 ],
             },
         )
-        gen_data = gen_resp.json()
-        summary = gen_data.get("answer", "")
 
+    # A failed generation is a failure, not a summary: surface it, never cache it.
+    if gen_resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Generation service failed")
+
+    summary = gen_resp.json().get("answer") or ""
     if not summary:
-        return {"error": "Failed to generate summary"}
+        raise HTTPException(status_code=502, detail="Generation returned no summary")
 
-    # Cache the summary
     with engine.connect() as conn:
         conn.execute(
             text("""
                 INSERT INTO chapter_summaries (novel_id, start_chapter, end_chapter, summary)
                 VALUES (:nid, :s, :e, :sum)
-                ON CONFLICT (start_chapter, end_chapter) DO UPDATE SET summary = :sum
+                ON CONFLICT (novel_id, start_chapter, end_chapter) DO UPDATE SET summary = :sum
             """),
-            {"nid": request.novel_id, "s": request.start_chapter, "e": request.end_chapter, "sum": summary},
+            {"nid": request.novel_id, "s": request.start_chapter, "e": end_ch, "sum": summary},
         )
         conn.commit()
 
     return {
         "summary": summary,
         "start_chapter": request.start_chapter,
-        "end_chapter": request.end_chapter,
+        "end_chapter": end_ch,
         "cached": False,
     }
 
