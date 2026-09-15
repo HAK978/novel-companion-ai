@@ -2,6 +2,20 @@
 
 import { useState } from 'react'
 
+type ServiceStatus = {
+  status: string
+  backend?: string
+  model?: string
+  chunks_indexed?: number
+  workers?: number
+  error?: string
+}
+
+type Health = {
+  status: string
+  services?: Record<string, ServiceStatus>
+}
+
 type Novel = {
   id: number
   title: string
@@ -11,7 +25,7 @@ type Novel = {
 
 export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurrentChapter, novels, setNovels, setSelectedNovel }: {
   apiUrl: string
-  novelId: number
+  novelId: number | null
   currentChapter: number
   setCurrentChapter: (ch: number) => void
   novels: Novel[]
@@ -27,7 +41,7 @@ export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurren
   const [ingestMax, setIngestMax] = useState<number | ''>('')
   const [ingesting, setIngesting] = useState(false)
   const [ingestStatus, setIngestStatus] = useState('')
-  const [health, setHealth] = useState<any>(null)
+  const [health, setHealth] = useState<Health | null>(null)
 
   const saveProgress = async () => {
     setSaving(true)
@@ -112,7 +126,8 @@ export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurren
 
   return (
     <div className="space-y-6">
-      {/* Reading Progress */}
+      {/* Reading Progress — needs a novel to attach progress to */}
+      {novelId !== null && (
       <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4">
         <h2 className="text-lg font-bold mb-2">Reading Progress</h2>
         <p className="text-sm text-[#737373] mb-3">Set your current chapter to control spoiler filtering</p>
@@ -134,6 +149,7 @@ export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurren
           <span className="text-xs text-[#737373]">Currently: Ch. {currentChapter}</span>
         </div>
       </div>
+      )}
 
       {/* Add Novel */}
       <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4">
@@ -163,7 +179,8 @@ export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurren
         </button>
       </div>
 
-      {/* Ingest Chapters */}
+      {/* Ingest Chapters — chapters are ingested into a specific novel */}
+      {novelId !== null && (
       <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4">
         <h2 className="text-lg font-bold mb-2">Ingest Chapters</h2>
         <p className="text-sm text-[#737373] mb-3">Path to chapter files on the server</p>
@@ -192,6 +209,7 @@ export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurren
         </button>
         {ingestStatus && <p className="text-sm text-[#737373] mt-2">{ingestStatus}</p>}
       </div>
+      )}
 
       {/* System Health */}
       <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4">
@@ -207,7 +225,7 @@ export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurren
             <p className={`text-sm font-medium ${health.status === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
               Status: {health.status}
             </p>
-            {health.services && Object.entries(health.services).map(([name, info]: [string, any]) => (
+            {health.services && Object.entries(health.services).map(([name, info]) => (
               <p key={name} className="text-xs text-[#737373]">
                 <span className={info.status === 'ok' ? 'text-green-400' : 'text-red-400'}>●</span>
                 {' '}{name}: {info.status}

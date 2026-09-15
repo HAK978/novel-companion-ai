@@ -21,8 +21,18 @@ type Tab = typeof tabs[number]
 export default function Home() {
   const [novels, setNovels] = useState<Novel[]>([])
   const [selectedNovel, setSelectedNovel] = useState<Novel | null>(null)
-  const [currentChapter, setCurrentChapter] = useState<number>(1)
+  // Progress is tracked per novel. A single shared value carried one novel's
+  // chapter over to the next on switch, and kept it if the new novel had none.
+  const [progress, setProgress] = useState<Record<number, number>>({})
   const [activeTab, setActiveTab] = useState<Tab>('Ask')
+
+  const currentChapter = selectedNovel ? progress[selectedNovel.id] ?? 1 : 1
+
+  const setCurrentChapter = (chapter: number) => {
+    if (selectedNovel) {
+      setProgress(prev => ({ ...prev, [selectedNovel.id]: chapter }))
+    }
+  }
 
   useEffect(() => {
     fetch(`${API}/novels`)
@@ -36,12 +46,21 @@ export default function Home() {
 
   useEffect(() => {
     if (!selectedNovel) return
-    fetch(`${API}/progress/${selectedNovel.id}/default`)
+    const novelId = selectedNovel.id
+    let cancelled = false
+
+    fetch(`${API}/progress/${novelId}/default`)
       .then(r => r.json())
       .then(data => {
-        if (data.current_chapter) setCurrentChapter(data.current_chapter)
+        if (!cancelled && data.current_chapter) {
+          setProgress(prev => ({ ...prev, [novelId]: data.current_chapter }))
+        }
       })
       .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
   }, [selectedNovel])
 
   return (
@@ -63,7 +82,9 @@ export default function Home() {
               ))}
               {novels.length === 0 && <option value="">No novels</option>}
             </select>
-            <span className="text-sm text-[#737373]">Ch. {currentChapter}</span>
+            {selectedNovel && (
+              <span className="text-sm text-[#737373]">Ch. {currentChapter}</span>
+            )}
           </div>
         </div>
         <nav className="flex gap-1 mt-3">
@@ -84,10 +105,23 @@ export default function Home() {
       </header>
 
       <main className="flex-1 overflow-y-auto p-4">
-        {!selectedNovel ? (
+        {/* Settings renders with or without a novel: it is where the first one
+            gets added, so gating it behind a selection was a dead end. */}
+        {activeTab === 'Settings' ? (
+          <SettingsTab
+            apiUrl={API} novelId={selectedNovel?.id ?? null} currentChapter={currentChapter}
+            setCurrentChapter={setCurrentChapter} novels={novels}
+            setNovels={setNovels} setSelectedNovel={setSelectedNovel}
+          />
+        ) : !selectedNovel ? (
           <div className="text-center text-[#737373] mt-20">
             <p className="text-lg">No novels found</p>
-            <p className="text-sm mt-2">Go to Settings to add a novel</p>
+            <button
+              onClick={() => setActiveTab('Settings')}
+              className="text-sm mt-2 text-[#3b82f6] hover:underline"
+            >
+              Add a novel in Settings
+            </button>
           </div>
         ) : (
           <>
@@ -99,13 +133,6 @@ export default function Home() {
             )}
             {activeTab === 'Summary' && (
               <SummaryTab apiUrl={API} novelId={selectedNovel.id} currentChapter={currentChapter} />
-            )}
-            {activeTab === 'Settings' && (
-              <SettingsTab
-                apiUrl={API} novelId={selectedNovel.id} currentChapter={currentChapter}
-                setCurrentChapter={setCurrentChapter} novels={novels}
-                setNovels={setNovels} setSelectedNovel={setSelectedNovel}
-              />
             )}
           </>
         )}

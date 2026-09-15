@@ -2,6 +2,19 @@
 
 import { useState } from 'react'
 
+type NewCharacter = {
+  name: string
+  description?: string | null
+}
+
+type CatchUp = {
+  error?: string
+  summary?: string
+  cached?: boolean
+  summary_range?: { start: number; end: number }
+  new_characters?: NewCharacter[]
+}
+
 export default function SummaryTab({ apiUrl, novelId, currentChapter }: {
   apiUrl: string
   novelId: number
@@ -12,7 +25,7 @@ export default function SummaryTab({ apiUrl, novelId, currentChapter }: {
   const [summary, setSummary] = useState('')
   const [cached, setCached] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [catchUpResult, setCatchUpResult] = useState<any>(null)
+  const [catchUpResult, setCatchUpResult] = useState<CatchUp | null>(null)
   const [catchUpLoading, setCatchUpLoading] = useState(false)
 
   const handleSummarize = async () => {
@@ -84,10 +97,10 @@ export default function SummaryTab({ apiUrl, novelId, currentChapter }: {
                   </p>
                   <p className="text-sm mt-2 whitespace-pre-wrap">{catchUpResult.summary}</p>
                 </div>
-                {catchUpResult.new_characters?.length > 0 && (
+                {catchUpResult.new_characters && catchUpResult.new_characters.length > 0 && (
                   <div>
                     <p className="text-xs text-[#737373] mb-1">New characters in this range:</p>
-                    {catchUpResult.new_characters.map((c: any, i: number) => (
+                    {catchUpResult.new_characters.map((c, i) => (
                       <p key={i} className="text-sm">
                         <span className="text-[#3b82f6]">{c.name}</span>
                         {c.description && <span className="text-[#737373]"> — {c.description}</span>}

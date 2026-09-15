@@ -19,20 +19,35 @@ export default function CharactersTab({ apiUrl, novelId, currentChapter }: {
   novelId: number
   currentChapter: number
 }) {
-  const [characters, setCharacters] = useState<Character[]>([])
-  const [selected, setSelected] = useState<CharacterDetail | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loaded, setLoaded] = useState<{ key: string; characters: Character[] } | null>(null)
+  const [selection, setSelected] = useState<{ key: string; detail: CharacterDetail } | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
+  // Results are tagged with the novel and chapter they were fetched for, so
+  // loading state is derived rather than stored: it is true the moment those
+  // change, and neither the list nor an open character detail can be left
+  // over from a different novel.
+  const requestKey = `${novelId}:${currentChapter}`
+  const loading = loaded?.key !== requestKey
+  const characters = loaded?.key === requestKey ? loaded.characters : []
+  const selected = selection?.key === requestKey ? selection.detail : null
+
   useEffect(() => {
-    setLoading(true)
+    const key = `${novelId}:${currentChapter}`
+    let cancelled = false
+
     fetch(`${apiUrl}/characters/list?novel_id=${novelId}&current_chapter=${currentChapter}`)
       .then(r => r.json())
       .then(data => {
-        if (Array.isArray(data)) setCharacters(data)
-        setLoading(false)
+        if (!cancelled) setLoaded({ key, characters: Array.isArray(data) ? data : [] })
       })
-      .catch(() => setLoading(false))
+      .catch(() => {
+        if (!cancelled) setLoaded({ key, characters: [] })
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [apiUrl, novelId, currentChapter])
 
   const loadCharacter = async (name: string) => {
@@ -42,7 +57,7 @@ export default function CharactersTab({ apiUrl, novelId, currentChapter }: {
         `${apiUrl}/characters/${encodeURIComponent(name)}?novel_id=${novelId}&current_chapter=${currentChapter}`
       )
       const data = await resp.json()
-      if (!data.error) setSelected(data)
+      if (!data.error) setSelected({ key: requestKey, detail: data })
     } catch { /* ignore */ }
     setDetailLoading(false)
   }
