@@ -1,5 +1,7 @@
 # Novel Companion AI
 
+[![CI](https://github.com/HAK978/novel-companion-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/HAK978/novel-companion-ai/actions/workflows/ci.yml)
+
 A reading companion for long web novels. Ask questions about the story, look up characters,
 or get a recap of where you left off — answered from the actual chapter text, and scoped so
 nothing past your current chapter is ever used.
@@ -129,6 +131,21 @@ summarization, character recall, progress tracking, MCP server, web UI.
 
 Next: an evaluation harness, request tracing, streaming responses, hybrid search with
 reranking, tests and CI, and fine-tuning on a distilled dataset.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Unit and API tests run against stubbed vector store, database and HTTP clients, so
+they need no services running. Integration tests hit a live stack and are skipped
+unless asked for:
+
+```bash
+RUN_INTEGRATION=1 pytest -m integration
+```
 
 ## Data
 

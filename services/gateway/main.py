@@ -1,17 +1,16 @@
+from datetime import UTC, datetime
+
+import httpx
+from config import (
+    DATABASE_URL,
+    GENERATION_SERVICE_URL,
+    INGESTION_SERVICE_URL,
+    RETRIEVAL_SERVICE_URL,
+)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime, timezone
-import httpx
 from sqlalchemy import create_engine, text
-
-from config import (
-    INGESTION_SERVICE_URL,
-    RETRIEVAL_SERVICE_URL,
-    GENERATION_SERVICE_URL,
-    DATABASE_URL,
-)
 
 app = FastAPI(title="Novel Companion AI - Gateway")
 
@@ -30,9 +29,9 @@ engine = create_engine(DATABASE_URL)
 
 class NovelCreate(BaseModel):
     title: str
-    author: Optional[str] = None
+    author: str | None = None
     source_type: str = "local_json"
-    source_url: Optional[str] = None
+    source_url: str | None = None
 
 
 class QueryRequest(BaseModel):
@@ -51,15 +50,15 @@ class ChunkResult(BaseModel):
 
 
 class QueryResponse(BaseModel):
-    answer: Optional[str]
+    answer: str | None
     model_used: str = "none"
-    sources: List[ChunkResult]
+    sources: list[ChunkResult]
 
 
 class IngestRequest(BaseModel):
     novel_id: int
     number: int
-    title: Optional[str] = None
+    title: str | None = None
     content: str
     volume: int = 1
     extract_entities: bool = False
@@ -69,7 +68,7 @@ class IngestFromSourceRequest(BaseModel):
     novel_id: int
     source_type: str
     source_path: str
-    max_chapters: Optional[int] = None
+    max_chapters: int | None = None
     extract_entities: bool = False
 
 
@@ -122,7 +121,10 @@ async def list_novels():
 async def get_novel(novel_id: int):
     with engine.connect() as conn:
         row = conn.execute(
-            text("SELECT id, title, author, source_type, source_url, total_chapters, created_at FROM novels WHERE id = :id"),
+            text(
+                "SELECT id, title, author, source_type, source_url, total_chapters, created_at "
+                "FROM novels WHERE id = :id"
+            ),
             {"id": novel_id},
         ).fetchone()
     if not row:
@@ -261,7 +263,7 @@ async def query(request: QueryRequest):
                 INSERT INTO search_history (novel_id, query, results_count, timestamp)
                 VALUES (:nid, :q, :c, :ts)
             """),
-            {"nid": request.novel_id, "q": request.query, "c": len(results), "ts": datetime.now(timezone.utc)},
+            {"nid": request.novel_id, "q": request.query, "c": len(results), "ts": datetime.now(UTC)},
         )
         conn.commit()
 
@@ -278,7 +280,7 @@ class SummarizeRequest(BaseModel):
     novel_id: int
     start_chapter: int
     end_chapter: int
-    current_chapter: Optional[int] = None
+    current_chapter: int | None = None
 
 
 class CatchMeUpRequest(BaseModel):
@@ -333,7 +335,11 @@ async def summarize(request: SummarizeRequest):
         gen_resp = await client.post(
             f"{GENERATION_SERVICE_URL}/generate",
             json={
-                "query": f"Summarize the key events, character developments, and plot points from chapters {request.start_chapter} to {request.end_chapter}. Be comprehensive but concise.",
+                "query": (
+                    f"Summarize the key events, character developments, and plot points "
+                    f"from chapters {request.start_chapter} to {request.end_chapter}. "
+                    f"Be comprehensive but concise."
+                ),
                 "context_chunks": [
                     f"[Chapter {r['chapter_number']}: {r.get('chapter_title', '')}]\n{r['text']}"
                     for r in results
@@ -426,18 +432,25 @@ async def update_progress(request: ProgressRequest):
                 "nid": request.novel_id,
                 "uid": request.user_id,
                 "ch": request.current_chapter,
-                "ts": datetime.now(timezone.utc),
+                "ts": datetime.now(UTC),
             },
         )
         conn.commit()
-    return {"novel_id": request.novel_id, "user_id": request.user_id, "current_chapter": request.current_chapter}
+    return {
+        "novel_id": request.novel_id,
+        "user_id": request.user_id,
+        "current_chapter": request.current_chapter,
+    }
 
 
 @app.get("/progress/{novel_id}/{user_id}")
 async def get_progress(novel_id: int, user_id: str = "default"):
     with engine.connect() as conn:
         row = conn.execute(
-            text("SELECT current_chapter, updated_at FROM reading_progress WHERE novel_id = :nid AND user_id = :uid"),
+            text(
+                "SELECT current_chapter, updated_at FROM reading_progress "
+                "WHERE novel_id = :nid AND user_id = :uid"
+            ),
             {"nid": novel_id, "uid": user_id},
         ).fetchone()
 

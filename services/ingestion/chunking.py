@@ -1,5 +1,4 @@
 import re
-from typing import List
 
 
 def clean_html(html_content: str) -> str:
@@ -10,7 +9,7 @@ def clean_html(html_content: str) -> str:
     return text
 
 
-def chunk_text(text: str, chunk_size: int = 400) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 400) -> list[str]:
     """Split text into chunks, preserving sentence boundaries."""
     words = text.split()
     chunks = []

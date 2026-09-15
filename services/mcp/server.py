@@ -13,7 +13,6 @@ Run:  python server.py          (stdio transport)
 """
 
 import os
-from typing import Optional
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -39,12 +38,12 @@ def _post(path: str, payload: dict, timeout: float = 180) -> dict:
         return resp.json()
 
 
-def _reading_progress(novel_id: int) -> Optional[int]:
+def _reading_progress(novel_id: int) -> int | None:
     data = _get(f"/progress/{novel_id}/{USER_ID}")
     return data.get("current_chapter")
 
 
-def _scoped_chapter(novel_id: int, requested: Optional[int]) -> int | dict:
+def _scoped_chapter(novel_id: int, requested: int | None) -> int | dict:
     """Resolve the chapter ceiling for content tools.
 
     Uses stored reading progress; an explicit request may only narrow the
@@ -89,7 +88,7 @@ def set_reading_progress(novel_id: int, chapter: int) -> dict:
 
 
 @mcp.tool()
-def query_novel(question: str, novel_id: int, current_chapter: Optional[int] = None) -> dict:
+def query_novel(question: str, novel_id: int, current_chapter: int | None = None) -> dict:
     """Ask any question about a novel's story, characters, or events.
     Answered with RAG over the actual chapter text, restricted to chapters
     the reader has already read (their stored progress). Pass current_chapter
@@ -114,7 +113,7 @@ def query_novel(question: str, novel_id: int, current_chapter: Optional[int] = N
 
 
 @mcp.tool()
-def get_character(name: str, novel_id: int, current_chapter: Optional[int] = None) -> dict:
+def get_character(name: str, novel_id: int, current_chapter: int | None = None) -> dict:
     """Look up a character in the structured character database: description,
     aliases, first appearance, relationships, recent mentions — limited to what
     the reader has read so far. Only populated for novels ingested with entity

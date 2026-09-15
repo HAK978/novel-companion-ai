@@ -1,6 +1,6 @@
 from adapters.base import BaseAdapter
-from adapters.local_json import LocalJsonAdapter
 from adapters.epub import EpubAdapter
+from adapters.local_json import LocalJsonAdapter
 
 
 def get_adapter(source_type: str, source_path: str) -> BaseAdapter:

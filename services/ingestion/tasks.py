@@ -1,14 +1,18 @@
-from celery import Celery
+from datetime import UTC, datetime
+
 import chromadb
 import httpx
-from sqlalchemy import create_engine, text as sa_text
-from datetime import datetime, timezone
-
-from chunking import clean_html, chunk_text
+from celery import Celery
+from chunking import chunk_text, clean_html
 from config import (
-    REDIS_URL, CHROMADB_URL, DATABASE_URL,
-    CHUNK_SIZE, GENERATION_SERVICE_URL,
+    CHROMADB_URL,
+    CHUNK_SIZE,
+    DATABASE_URL,
+    GENERATION_SERVICE_URL,
+    REDIS_URL,
 )
+from sqlalchemy import create_engine
+from sqlalchemy import text as sa_text
 
 celery_app = Celery("ingestion", broker=REDIS_URL, backend=REDIS_URL)
 celery_app.conf.update(
@@ -103,7 +107,8 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False) -> dict
     with engine.connect() as conn:
         conn.execute(
             sa_text("""
-                INSERT INTO chapters (novel_id, chapter_number, title, word_count, volume, ingestion_status, ingested_at)
+                INSERT INTO chapters
+                    (novel_id, chapter_number, title, word_count, volume, ingestion_status, ingested_at)
                 VALUES (:nid, :num, :title, :wc, :vol, 'complete', :ts)
                 ON CONFLICT (novel_id, chapter_number)
                 DO UPDATE SET ingestion_status = 'complete', ingested_at = :ts, word_count = :wc
@@ -114,7 +119,7 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False) -> dict
                 "title": title,
                 "wc": word_count,
                 "vol": volume,
-                "ts": datetime.now(timezone.utc),
+                "ts": datetime.now(UTC),
             },
         )
 
@@ -174,7 +179,8 @@ def _store_entities(novel_id: int, chapter_num: int, characters: list) -> int:
             # Upsert character
             result = conn.execute(
                 sa_text("""
-                    INSERT INTO characters (novel_id, name, aliases, first_appearance, description, updated_at)
+                    INSERT INTO characters
+                        (novel_id, name, aliases, first_appearance, description, updated_at)
                     VALUES (:nid, :name, :aliases, :ch, :desc, :ts)
                     ON CONFLICT (novel_id, name)
                     DO UPDATE SET
@@ -195,7 +201,7 @@ def _store_entities(novel_id: int, chapter_num: int, characters: list) -> int:
                     "aliases": aliases,
                     "ch": chapter_num,
                     "desc": role,
-                    "ts": datetime.now(timezone.utc),
+                    "ts": datetime.now(UTC),
                 },
             )
             row = result.fetchone()
@@ -229,7 +235,7 @@ def _store_entities(novel_id: int, chapter_num: int, characters: list) -> int:
                         DO UPDATE SET updated_at = :ts
                         RETURNING id
                     """),
-                    {"nid": novel_id, "name": other_name, "ch": chapter_num, "ts": datetime.now(timezone.utc)},
+                    {"nid": novel_id, "name": other_name, "ch": chapter_num, "ts": datetime.now(UTC)},
                 )
                 other_row = other_result.fetchone()
                 if not other_row:
@@ -237,7 +243,9 @@ def _store_entities(novel_id: int, chapter_num: int, characters: list) -> int:
 
                 conn.execute(
                     sa_text("""
-                        INSERT INTO character_relationships (novel_id, character_a_id, character_b_id, relationship_type, first_chapter, updated_at)
+                        INSERT INTO character_relationships
+                            (novel_id, character_a_id, character_b_id,
+                             relationship_type, first_chapter, updated_at)
                         VALUES (:nid, :a, :b, :rel, :ch, :ts)
                         ON CONFLICT (character_a_id, character_b_id, relationship_type) DO NOTHING
                     """),
@@ -247,7 +255,7 @@ def _store_entities(novel_id: int, chapter_num: int, characters: list) -> int:
                         "b": other_row[0],
                         "rel": rel_type,
                         "ch": chapter_num,
-                        "ts": datetime.now(timezone.utc),
+                        "ts": datetime.now(UTC),
                     },
                 )
 

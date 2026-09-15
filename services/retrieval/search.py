@@ -1,7 +1,7 @@
-from typing import List, Dict, Any
+from typing import Any
+
 import chromadb
 from config import CHROMADB_URL
-
 
 COMPLEX_KEYWORDS = [
     "summarize", "explain", "arc", "story", "what happened", "tell me about"
@@ -38,8 +38,8 @@ def search_chunks(
     current_chapter: int,
     n_results: int = 5,
     collection_name: str = "shadow_slave",
-    min_chapter: int = None,
-) -> List[Dict[str, Any]]:
+    min_chapter: int | None = None,
+) -> list[dict[str, Any]]:
     """min_chapter sets a floor for range-scoped questions (e.g. summaries).
     Without it, similarity search is arc-blind: thematically similar chunks
     from hundreds of chapters earlier outrank the relevant window — numbers
@@ -73,6 +73,7 @@ def search_chunks(
             results["documents"][0],
             results["metadatas"][0],
             results["distances"][0],
+            strict=False,
         ):
             formatted.append({
                 "text": doc,

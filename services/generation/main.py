@@ -1,8 +1,7 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import List, Optional
 
+from fastapi import FastAPI
 from llm_handler import LLMHandler
+from pydantic import BaseModel
 
 app = FastAPI(title="Generation Service")
 llm = LLMHandler()
@@ -10,12 +9,12 @@ llm = LLMHandler()
 
 class GenerateRequest(BaseModel):
     query: str
-    context_chunks: List[str]
+    context_chunks: list[str]
     conversation_context: str = ""
 
 
 class GenerateResponse(BaseModel):
-    answer: Optional[str]
+    answer: str | None
     model_used: str
 
 

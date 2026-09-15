@@ -1,17 +1,16 @@
+
+from celery.result import AsyncResult
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import Optional
-from celery.result import AsyncResult
-
 from tasks import celery_app, ingest_chapter, ingest_from_source
 
 app = FastAPI(title="Ingestion Service")
 
 
 class ChapterIngest(BaseModel):
-    novel_id: Optional[int] = None
+    novel_id: int | None = None
     number: int
-    title: Optional[str] = None
+    title: str | None = None
     content: str
     volume: int = 1
     extract_entities: bool = False
@@ -21,7 +20,7 @@ class IngestFromSourceRequest(BaseModel):
     novel_id: int
     source_type: str
     source_path: str
-    max_chapters: Optional[int] = None
+    max_chapters: int | None = None
     extract_entities: bool = False
 
 

@@ -1,9 +1,7 @@
 import os
-from typing import List, Optional
 
 import httpx
-
-from config import OLLAMA_URL, OPENAI_API_KEY
+from config import OPENAI_API_KEY
 
 # Model config
 HF_MODEL = os.environ.get("HF_MODEL", "mistralai/Mistral-Nemo-Instruct-2407")
@@ -67,8 +65,8 @@ class LLMHandler:
 
         self.backend = "none"
 
-    def generate(self, query: str, context_chunks: List[str],
-                 conversation_context: str = "") -> Optional[str]:
+    def generate(self, query: str, context_chunks: list[str],
+                 conversation_context: str = "") -> str | None:
         if self.backend == "none":
             return None
 
@@ -82,7 +80,7 @@ class LLMHandler:
             return self._openai_generate(prompt)
         return None
 
-    def _build_prompt(self, query: str, context_chunks: List[str],
+    def _build_prompt(self, query: str, context_chunks: list[str],
                       conversation_context: str = "") -> str:
         parts = []
 

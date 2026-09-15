@@ -1,10 +1,10 @@
+
+from config import DATABASE_URL
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List, Optional
-from sqlalchemy import create_engine, text as sa_text
-
-from search import search_chunks, get_collection, delete_collection
-from config import DATABASE_URL
+from search import delete_collection, search_chunks
+from sqlalchemy import create_engine
+from sqlalchemy import text as sa_text
 
 app = FastAPI(title="Retrieval Service")
 engine = create_engine(DATABASE_URL)
@@ -15,7 +15,7 @@ class SearchRequest(BaseModel):
     current_chapter: int
     n_results: int = 5
     collection_name: str = "shadow_slave"
-    min_chapter: Optional[int] = None
+    min_chapter: int | None = None
 
 
 class ChunkResult(BaseModel):
@@ -27,7 +27,7 @@ class ChunkResult(BaseModel):
 
 class SearchResponse(BaseModel):
     query: str
-    results: List[ChunkResult]
+    results: list[ChunkResult]
     count: int
 
 

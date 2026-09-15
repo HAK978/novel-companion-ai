@@ -1,4 +1,4 @@
-from typing import List, Optional
+
 from adapters.base import BaseAdapter
 
 
@@ -8,12 +8,12 @@ class EpubAdapter(BaseAdapter):
     def __init__(self, source_path: str):
         self.path = source_path
 
-    def fetch_all(self, max_chapters: Optional[int] = None) -> List[dict]:
+    def fetch_all(self, max_chapters: int | None = None) -> list[dict]:
         try:
             import ebooklib
             from ebooklib import epub
         except ImportError:
-            raise ImportError("Install ebooklib: pip install ebooklib")
+            raise ImportError("Install ebooklib: pip install ebooklib") from None
 
         book = epub.read_epub(self.path)
         chapters = []

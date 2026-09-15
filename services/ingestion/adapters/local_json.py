@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import List, Optional
+
 from adapters.base import BaseAdapter
 
 
@@ -10,7 +10,7 @@ class LocalJsonAdapter(BaseAdapter):
     def __init__(self, source_path: str):
         self.path = Path(source_path)
 
-    def fetch_all(self, max_chapters: Optional[int] = None) -> List[dict]:
+    def fetch_all(self, max_chapters: int | None = None) -> list[dict]:
         if self.path.is_file():
             return self._load_combined_json(max_chapters)
         elif self.path.is_dir():
@@ -18,7 +18,7 @@ class LocalJsonAdapter(BaseAdapter):
         else:
             raise FileNotFoundError(f"Source path not found: {self.path}")
 
-    def _load_chapter_files(self, max_chapters: Optional[int] = None) -> List[dict]:
+    def _load_chapter_files(self, max_chapters: int | None = None) -> list[dict]:
         """Load individual chapter JSON files from a directory (including subdirectories)."""
         # Search recursively for JSON files, exclude meta.json
         files = sorted(
@@ -31,7 +31,7 @@ class LocalJsonAdapter(BaseAdapter):
         chapters = []
         for i, f in enumerate(files, 1):
             try:
-                with open(f, "r", encoding="utf-8") as fh:
+                with open(f, encoding="utf-8") as fh:
                     data = json.load(fh)
                 content = data.get("content", data.get("body", ""))
                 if not content or len(content) < 100:
@@ -46,9 +46,9 @@ class LocalJsonAdapter(BaseAdapter):
                 continue
         return chapters
 
-    def _load_combined_json(self, max_chapters: Optional[int] = None) -> List[dict]:
+    def _load_combined_json(self, max_chapters: int | None = None) -> list[dict]:
         """Load from a single JSON file containing all chapters."""
-        with open(self.path, "r", encoding="utf-8") as f:
+        with open(self.path, encoding="utf-8") as f:
             data = json.load(f)
 
         # Handle both array format and {"chapters": [...]} format
