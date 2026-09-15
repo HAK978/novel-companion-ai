@@ -1,0 +1,41 @@
+# Environment / secrets
+.env
+*.env
+!.env.example
+
+# Novel text and derived data — copyrighted source material, not redistributable
+training/data/
+training/data_v2/
+data/chapters/
+novel-data/
+*.jsonl
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# Runtime output
+logs/
+*.log
+
+# Local model / vector store caches
+.chroma/
+chroma-data/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local planning notes, not part of the project
+ROADMAP.md

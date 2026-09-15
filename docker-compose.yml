@@ -1,0 +1,141 @@
+services:
+  # --- Infrastructure ---
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-novel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-novel}
+      POSTGRES_DB: ${POSTGRES_DB:-novel_companion}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-novel} -d ${POSTGRES_DB:-novel_companion}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8005:8000"
+    volumes:
+      # this image stores data at /data (see startup banner), not /chroma/chroma
+      - chroma-data:/data
+    ulimits:
+      # default 1024 exhausts during bulk ingestion; sqlite then fails with
+      # SQLITE_CANTOPEN and the store corrupts
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      # image has no curl; bash /dev/tcp checks the port is accepting
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Application Services ---
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - INGESTION_SERVICE_URL=http://ingestion:8001
+      - RETRIEVAL_SERVICE_URL=http://retrieval:8002
+      - GENERATION_SERVICE_URL=http://generation:8003
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-novel}:${POSTGRES_PASSWORD:-novel}@postgres:5432/${POSTGRES_DB:-novel_companion}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ingestion:
+        condition: service_started
+      retrieval:
+        condition: service_started
+      generation:
+        condition: service_started
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: services/ingestion/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CHROMADB_URL=http://chromadb:8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-novel}:${POSTGRES_PASSWORD:-novel}@postgres:5432/${POSTGRES_DB:-novel_companion}
+      - GENERATION_SERVICE_URL=http://generation:8003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+
+  ingestion-worker:
+    build:
+      context: .
+      dockerfile: services/ingestion/Dockerfile
+    command: celery -A tasks worker --loglevel=info --concurrency=2
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CHROMADB_URL=http://chromadb:8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-novel}:${POSTGRES_PASSWORD:-novel}@postgres:5432/${POSTGRES_DB:-novel_companion}
+      - GENERATION_SERVICE_URL=http://generation:8003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+
+  retrieval:
+    build:
+      context: .
+      dockerfile: services/retrieval/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - CHROMADB_URL=http://chromadb:8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-novel}:${POSTGRES_PASSWORD:-novel}@postgres:5432/${POSTGRES_DB:-novel_companion}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+
+  generation:
+    build:
+      context: .
+      dockerfile: services/generation/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+
+volumes:
+  postgres-data:
+  redis-data:
+  chroma-data:

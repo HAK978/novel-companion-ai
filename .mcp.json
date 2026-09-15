@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "novel-companion": {
+      "command": "/home/hkute/miniconda3/bin/python",
+      "args": ["/home/hkute/novel-companion-ai/services/mcp/server.py"],
+      "env": {
+        "GATEWAY_URL": "http://localhost:8000"
+      }
+    }
+  }
+}
