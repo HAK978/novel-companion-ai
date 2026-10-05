@@ -103,7 +103,7 @@ jobs:
         run: pip install ruff==0.16.7
 
       - name: Check
-        run: ruff check services/ tests/ scripts/ --output-format=github
+        run: ruff check services/ tests/ scripts/ eval/ --output-format=github
 
   frontend:
     runs-on: ubuntu-latest

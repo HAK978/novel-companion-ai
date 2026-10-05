@@ -50,3 +50,6 @@ data/*
 !data/novels/
 data/novels/*
 !data/novels/.gitkeep
+
+# Evaluation set for a public-domain book (other books' sets stay local)
+!eval/sets/hound.jsonl

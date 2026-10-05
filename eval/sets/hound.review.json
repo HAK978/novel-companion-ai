@@ -1,0 +1,18 @@
+{
+  "reviewed": "2026-10-05",
+  "drafted": 54,
+  "dropped": {
+    "hound-001": "asks for the dog's name; the reference is its breed",
+    "hound-011": "not a reveal: Rodger Baskerville is mentioned openly early on",
+    "hound-020": "unclear which afternoon; weak question",
+    "hound-023": "duplicate of hound-024/hound-028",
+    "hound-029": "wrong reference: the bearded man in the cab is Stapleton, not Barrymore (Barrymore is only Watson's early theory)",
+    "hound-030": "odd question (Laura Lyons' initials)",
+    "hound-035": "ambiguous: Sir Henry is absent on several occasions",
+    "hound-036": "vague reference answer",
+    "hound-038": "duplicate reveal of hound-037",
+    "hound-039": "duplicate reveal of hound-037"
+  },
+  "added_by_hand": 5,
+  "final": 49
+}

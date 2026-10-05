@@ -190,6 +190,20 @@ docker compose up -d    # back to the real model
 
 `NOVEL_DATA_DIR` must name the directory the stack mounts.
 
+## Evaluation
+
+`eval/` holds a question set for *The Hound of the Baskervilles* (public domain) and the
+scripts that made and score it. `generate_set.py` drafts questions for any book with an LLM
+and keeps only those it can check (answers must quote the chapter verbatim; invented names
+must be absent from the whole book); the set was then reviewed by hand
+(`sets/hound.review.json`). `run_eval.py` sends each question through `/query` at its
+reading position and scores retrieval in code and answers with an LLM judge;
+`--no-retrieval` asks the model directly instead, as a chatbot would be asked.
+
+```bash
+python eval/run_eval.py --set eval/sets/hound.jsonl --novel-id 4
+```
+
 ## Data
 
 No novel text is included here. Chapter content belongs to its authors; the ingestion

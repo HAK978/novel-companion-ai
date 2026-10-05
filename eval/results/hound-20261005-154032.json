@@ -1,0 +1,919 @@
+{
+  "set": "eval/sets/hound.jsonl",
+  "judge": "mistralai/Mistral-Nemo-Instruct-2407",
+  "mode": "app",
+  "summary": {
+    "overall": {
+      "items": 49,
+      "sources_spoiler_safe": 1.0,
+      "median_seconds": 3.84
+    },
+    "fact": {
+      "items": 25,
+      "correct": 0.28,
+      "declined": 0.52,
+      "context_recall": 0.68
+    },
+    "recent": {
+      "items": 5,
+      "correct": 0.6,
+      "declined": 0.4,
+      "context_recall": 0.4
+    },
+    "spoiler": {
+      "items": 9,
+      "safe": 0.6666666666666666
+    },
+    "unanswerable": {
+      "items": 10,
+      "abstained": 0.5
+    }
+  },
+  "results": [
+    {
+      "id": "hound-002",
+      "category": "unanswerable",
+      "current_chapter": 7,
+      "question": "Why did Dr. Amelia Hartley leave her position at St. Bartholomew's Hospital?",
+      "answer": "Dr. Amelia Hartley left her position at St. Bartholomew's Hospital to move to the moorland house, Merripit House, with her brother, Jack Stapleton. She mentioned that she had a school in the north country, suggesting that she may have left her position there to move to Merripit House. The reason for their move to this remote location has not been explicitly stated in the story yet.",
+      "source_chapters": [
+        2,
+        6,
+        7
+      ],
+      "seconds": 3.84,
+      "sources_spoiler_safe": true,
+      "verdict": "INVENTED",
+      "passed": false,
+      "declined": true
+    },
+    {
+      "id": "hound-003",
+      "category": "fact",
+      "current_chapter": 14,
+      "question": "What was Sir Charles Baskerville's intended destination the day he died?",
+      "answer": "Based on the passages provided, Sir Charles Baskerville's intended destination the day he died was London. This is mentioned in Passage 2, where it is stated that \"Sir Charles had declared his intention of starting next day for London, and had ordered Barrymore to prepare his luggage.\" This was the reason he was taking his nocturnal walk down the yew alley, as it was his habit to do so before going to bed.",
+      "source_chapters": [
+        2,
+        6,
+        11
+      ],
+      "seconds": 3.81,
+      "sources_spoiler_safe": true,
+      "verdict": "CORRECT",
+      "passed": true,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-004",
+      "category": "fact",
+      "current_chapter": 8,
+      "question": "Who was the last person to see Sir Charles Baskerville alive?",
+      "answer": "Based on the passages provided, the last person to see Sir Charles Baskerville alive was his butler, John Barrymore. This is mentioned in Passage 2, Chapter 2: \"The facts of the case are simple. Sir Charles Baskerville... ordered Barrymore to prepare his luggage. That night he went out as usual for his nocturnal walk, in the course of which he was in the habit of smoking a cigar. He never returned. At twelve o'clock Barrymore, finding the hall door still open, became alarmed, and, lighting a lantern, went in search of his master.\" So, John Barrymore was the last person known to have seen Sir Charles Baskerville alive before his body was discovered on the moor.",
+      "source_chapters": [
+        2,
+        6
+      ],
+      "seconds": 6.02,
+      "sources_spoiler_safe": true,
+      "verdict": "CORRECT",
+      "passed": true,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-005",
+      "category": "fact",
+      "current_chapter": 2,
+      "question": "What was the name of the newspaper that Dr. Mortimer read from?",
+      "answer": "The name of the newspaper that Dr. Mortimer read from is not explicitly stated in the passages provided. The story has not revealed that yet.",
+      "source_chapters": [
+        1,
+        2
+      ],
+      "seconds": 1.66,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": true
+    },
+    {
+      "id": "hound-006",
+      "category": "recent",
+      "current_chapter": 3,
+      "question": "Who is the last heir of the Baskerville family?",
+      "answer": "Based on the passages provided, the last heir of the Baskerville family is Mr. Henry Baskerville. This is explicitly stated in Passage 1, where Dr. Mortimer discusses the death of Sir Charles Baskerville and the search for his heir. He mentions that the next of kin is Mr. Henry Baskerville, the son of Sir Charles's younger brother, and that inquiries are being made to locate him in America.",
+      "source_chapters": [
+        2
+      ],
+      "seconds": 3.73,
+      "sources_spoiler_safe": true,
+      "verdict": "CORRECT",
+      "passed": true,
+      "declined": false,
+      "context_recall": false
+    },
+    {
+      "id": "hound-007",
+      "category": "fact",
+      "current_chapter": 7,
+      "question": "Where was Sir Henry Baskerville coming from?",
+      "answer": "Based on the passages provided, Sir Henry Baskerville was coming from America. This is mentioned in Passage 4, Chapter 2, where Dr. Mortimer discusses the death of Sir Charles Baskerville and the search for his heir. He states, \"It is understood that the next of kin is Mr. Henry Baskerville, if he be still alive, the son of Sir Charles Baskerville\u2019s younger brother. The young man when last heard of was in America, and inquiries are being instituted with a view to informing him of his good fortune.\" Therefore, Sir Henry Baskerville was in America before he came to Baskerville Hall in Devonshire.",
+      "source_chapters": [
+        2,
+        6,
+        7
+      ],
+      "seconds": 5.35,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": false,
+      "context_recall": false
+    },
+    {
+      "id": "hound-008",
+      "category": "fact",
+      "current_chapter": 11,
+      "question": "What was the name of the naturalist living near Baskerville Hall?",
+      "answer": "The name of the naturalist living near Baskerville Hall is not explicitly stated in the provided passages. The story has not revealed that yet.",
+      "source_chapters": [
+        2,
+        6,
+        7
+      ],
+      "seconds": 1.73,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": false
+    },
+    {
+      "id": "hound-009",
+      "category": "fact",
+      "current_chapter": 10,
+      "question": "What is the name of the hamlet near Baskerville Hall?",
+      "answer": "The name of the hamlet near Baskerville Hall is not explicitly mentioned in the provided passages. However, in Chapter 6, Dr. Mortimer points out the moor to Sir Henry Baskerville, saying, \"There is your first sight of the moor,\" and later, they pass through the lodge-gates of Baskerville Hall. The story has not revealed the name of the hamlet yet.",
+      "source_chapters": [
+        2,
+        6
+      ],
+      "seconds": 3.64,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": false
+    },
+    {
+      "id": "hound-010",
+      "category": "fact",
+      "current_chapter": 9,
+      "question": "What is the name of the prison located on the moor?",
+      "answer": "The name of the prison located on the moor is not explicitly stated in the given passages. However, it is mentioned that the escaped convict was from the Notting Hill area and that there are warders searching the moor for him (Chapter 9). It can be inferred that the convict likely escaped from a prison in the vicinity, but the specific name of the prison has not been revealed in the story so far.",
+      "source_chapters": [
+        4,
+        7,
+        8,
+        9
+      ],
+      "seconds": 3.75,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": false
+    },
+    {
+      "id": "hound-012",
+      "category": "unanswerable",
+      "current_chapter": 10,
+      "question": "Why did Isolde Hartley avoid the moor?",
+      "answer": "Based on the passages provided, Isolde Hartley, who is not a character in the story, is not mentioned in relation to avoiding the moor. However, the story does reveal that Sir Henry Baskerville, the main character, is advised to avoid the moor due to the legend of the Hound of the Baskervilles and the potential danger it poses. This is mentioned in Passage 5, Chapter 2, where a legend is told about a maid who was pursued by the hound on the moor, and in Passage 3, Chapter 10, where Dr. Watson expresses his concern about Sir Henry going onto the moor at night. Additionally, in Passage 4, Chapter 9, Dr. Watson is worried about Sir Henry going onto the moor alone, as he is supposed to be protected from potential threats. Therefore, while the story has not revealed that Isolde Hartley avoids the moor, it has established that the moor is a place to be avoided due to its dangerous reputation and potential threats.",
+      "source_chapters": [
+        2,
+        4,
+        7,
+        9,
+        10
+      ],
+      "seconds": 8.21,
+      "sources_spoiler_safe": true,
+      "verdict": "ABSTAINED",
+      "passed": true,
+      "declined": true
+    },
+    {
+      "id": "hound-013",
+      "category": "unanswerable",
+      "current_chapter": 8,
+      "question": "What was Edgar Sterling waiting for at the moor-gate on that particular night?",
+      "answer": "Based on the information provided in the passages, Edgar Sterling was waiting for someone at the moor-gate on that particular night because he was expecting a visitor from London. This is inferred from Sherlock Holmes' conversation with Dr. Watson in Chapter 3, where he states, \"He went out every evening. On the contrary, the evidence is that he avoided the moor. That night he waited there. It was the night before he made his departure for London.\" Therefore, Edgar Sterling was likely waiting for someone who was arriving from London.",
+      "source_chapters": [
+        2,
+        3,
+        4,
+        7,
+        8
+      ],
+      "seconds": 4.56,
+      "sources_spoiler_safe": true,
+      "verdict": "INVENTED",
+      "passed": false,
+      "declined": false
+    },
+    {
+      "id": "hound-014",
+      "category": "fact",
+      "current_chapter": 13,
+      "question": "What is the name of the hotel where Sir Henry Baskerville is staying?",
+      "answer": "The story has not revealed the name of the hotel where Sir Henry Baskerville is staying yet.",
+      "source_chapters": [
+        2,
+        5,
+        6
+      ],
+      "seconds": 1.4,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": false
+    },
+    {
+      "id": "hound-015",
+      "category": "fact",
+      "current_chapter": 7,
+      "question": "What is the warning message that Sir Henry receives?",
+      "answer": "The warning message that Sir Henry receives is conveyed to him by Miss Beryl Stapleton, whom he meets on the moor. She is the sister of Mr. Stapleton, a naturalist who lives at Merripit House. Miss Stapleton is anxious to warn Sir Henry about the danger he might face at Baskerville Hall. She believes in the curse of the Hound of the Baskervilles and fears that Sir Henry could be the next victim. She tells Sir Henry, \"I would ask you one more question, Miss Stapleton. If you meant no more than this when you first spoke to me, why should you not wish your brother to overhear what you said? There is nothing to which he, or anyone else, could object.\" However, she does not provide any specific details about the danger, only that Sir Henry should leave Baskerville Hall for his own safety. The story has not revealed yet what specific actions Sir Henry should take or who might be behind the threat. This information is drawn from Chapter 7: The Stapletons of Merripit House.",
+      "source_chapters": [
+        4,
+        6,
+        7
+      ],
+      "seconds": 8.49,
+      "sources_spoiler_safe": true,
+      "verdict": "PARTIAL",
+      "passed": false,
+      "declined": true,
+      "context_recall": true
+    },
+    {
+      "id": "hound-016",
+      "category": "fact",
+      "current_chapter": 12,
+      "question": "Who accompanies Sir Henry Baskerville to Sherlock Holmes' residence?",
+      "answer": "Based on the passages provided, the person who accompanies Sir Henry Baskerville to Sherlock Holmes' residence is Dr. Mortimer. This is explicitly stated in Passage 3: \"Our clients were punctual to their appointment, for the clock had just struck ten when Dr. Mortimer was shown up, followed by the young baronet.\"",
+      "source_chapters": [
+        4,
+        5,
+        6
+      ],
+      "seconds": 3.16,
+      "sources_spoiler_safe": true,
+      "verdict": "CORRECT",
+      "passed": true,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-017",
+      "category": "unanswerable",
+      "current_chapter": 6,
+      "question": "Why did Edgar Grimsby leave the city without telling anyone?",
+      "answer": "Based on the provided passages, Edgar Grimsby left the city without telling anyone because he was waiting for someone in the yew alley the night before his departure for London. This is mentioned in Passage 1, Chapter 3. The story has not revealed the identity of the person he was waiting for or the reason behind his sudden departure yet.",
+      "source_chapters": [
+        2,
+        3,
+        4
+      ],
+      "seconds": 3.18,
+      "sources_spoiler_safe": true,
+      "verdict": "INVENTED",
+      "passed": false,
+      "declined": true
+    },
+    {
+      "id": "hound-018",
+      "category": "unanswerable",
+      "current_chapter": 8,
+      "question": "What made Amelia Hartley decide to move to the countryside?",
+      "answer": "Based on the passages provided, the story has not revealed the specific reason why Amelia Hartley decided to move to the countryside. However, it does mention that she and her brother, Stapleton, moved to Merripit House in the countryside two years prior to the events of Chapter 7. The house is described as \"mean and melancholy,\" and Amelia herself seems unhappy there, stating \"Quite happy,\" without much conviction when her brother asks her. It is also mentioned that Stapleton had a school in the north country, which he gave up to move here.",
+      "source_chapters": [
+        2,
+        4,
+        7
+      ],
+      "seconds": 4.84,
+      "sources_spoiler_safe": true,
+      "verdict": "ABSTAINED",
+      "passed": true,
+      "declined": true
+    },
+    {
+      "id": "hound-019",
+      "category": "fact",
+      "current_chapter": 8,
+      "question": "Where did Dr. Mortimer spend his afternoon in London?",
+      "answer": "The story has not revealed where Dr. Mortimer spent his afternoon in London yet.",
+      "source_chapters": [
+        2,
+        3,
+        4,
+        7
+      ],
+      "seconds": 1.24,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": false
+    },
+    {
+      "id": "hound-021",
+      "category": "fact",
+      "current_chapter": 15,
+      "question": "What did Sherlock Holmes advise Sir Henry Baskerville not to do?",
+      "answer": "Based on the passages provided, Sherlock Holmes advises Sir Henry Baskerville not to do two things:\n\n1. **Not to get rid of the Barrymore couple**: In Chapter 6, Holmes explicitly says, \"By no means. You could not make a greater mistake. If they are innocent it would be a cruel injustice, and if they are guilty we should be giving up all chance of bringing it home to them. No, no, we will preserve them upon our list of suspects.\" So, Holmes advises Sir Henry not to dismiss the Barrymores from their positions at Baskerville Hall.\n\n2. **Not to relax his precautions**: In the same Chapter 6, Holmes emphasizes the importance of constant vigilance, saying, \"Keep your revolver near you night and day, and never relax your precautions.\" This suggests that Sir Henry should not let down his guard against potential dangers.",
+      "source_chapters": [
+        4,
+        5,
+        6,
+        14
+      ],
+      "seconds": 7.14,
+      "sources_spoiler_safe": true,
+      "verdict": "PARTIAL",
+      "passed": false,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-022",
+      "category": "fact",
+      "current_chapter": 10,
+      "question": "What did Sherlock Holmes advise Sir Henry Baskerville to do?",
+      "answer": "Based on the passages provided, Sherlock Holmes advised Sir Henry Baskerville to do the following:\n\n1. **Be Cautious and Armed**: Holmes emphasized the importance of Sir Henry being cautious and keeping his revolver near him at all times. He said, \"Keep your revolver near you night and day, and never relax your precautions.\" (Chapter 6)\n\n2. **Study His Surroundings and Neighbors**: Holmes suggested that Sir Henry should closely observe the people around him at Baskerville Hall. He specifically mentioned that Sir Henry should study the relations between himself and his neighbors, and any fresh particulars concerning the death of Sir Charles. (Chapter 6)\n\n3. **Go to Baskerville Hall**: Despite the potential danger, Holmes thought it was wise for Sir Henry to proceed to Baskerville Hall. He believed that in the vast city of London, it was difficult to identify those following Sir Henry, and they might cause him harm. In Devonshire, however, they could be more easily tracked. (Chapter 5)\n\n4. **Telegraph Barrymore**: Holmes suggested that Sir Henry should send a telegraph to Mr. Barrymore, the butler at Baskerville Hall, to confirm if he was indeed at his post in Devonshire. This was to ensure that Barrymore was not in London, potentially involved in the surveillance of Sir Henry. (Chapter 5)\n\n5. **Be Discreet**: Holmes advised Sir Henry to be discreet about his movements. He suggested that Sir Henry should not reveal his plans to anyone, as it was clear that someone was very interested in his whereabouts. (Chapter 4)",
+      "source_chapters": [
+        4,
+        5,
+        6
+      ],
+      "seconds": 12.6,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-024",
+      "category": "recent",
+      "current_chapter": 7,
+      "question": "Who is the woman who sobbed in the night at Baskerville Hall?",
+      "answer": "The woman who sobbed in the night at Baskerville Hall is Mrs. Barrymore, the housekeeper. This is explicitly stated in Passage 1, Chapter 7: \"But her telltale eyes were red and glanced at me from between swollen lids.\" This indicates that she had been crying, which corresponds to the sobbing sound heard by Sir Henry and Dr. Watson. When asked about the sound, Barrymore, her husband, lied and said it couldn't have come from her, but her red and swollen eyes betrayed her.",
+      "source_chapters": [
+        2,
+        6,
+        7
+      ],
+      "seconds": 4.68,
+      "sources_spoiler_safe": true,
+      "verdict": "CORRECT",
+      "passed": true,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-025",
+      "category": "fact",
+      "current_chapter": 11,
+      "question": "Where is Merripit House located?",
+      "answer": "Based on the provided passages, Merripit House is located on the moor near Baskerville Hall. Here's the relevant information:\n\n- In Passage 4 (Chapter 7), Dr. Watson meets Stapleton, who introduces himself as living at Merripit House. This conversation takes place on the moor, near the spot where Sir Charles Baskerville was found dead.\n- In Passage 3 (Chapter 6), Dr. Mortimer points out the moor to Sir Henry Baskerville and Dr. Watson from the carriage window. This is Sir Henry's first sight of the moor, and it's described as a \"grey, melancholy hill, with a strange jagged summit.\" This description matches the view from Merripit House, as seen when Dr. Watson meets Stapleton.\n- In Passage 2 (Chapter 6), the wagonette carrying Sir Henry, Dr. Watson, and Dr. Mortimer approaches Baskerville Hall. The description of the house and its surroundings matches the location of Merripit House on the moor.\n\nSo, based on these passages, Merripit House is located on the moor near Baskerville Hall, and it has a view of the same melancholy hill that Sir Henry sees from the carriage.",
+      "source_chapters": [
+        6,
+        7,
+        8
+      ],
+      "seconds": 9.83,
+      "sources_spoiler_safe": true,
+      "verdict": "PARTIAL",
+      "passed": false,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-026",
+      "category": "fact",
+      "current_chapter": 8,
+      "question": "What is the name of the naturalist who lives at Merripit House?",
+      "answer": "The name of the naturalist who lives at Merripit House is Mr. Stapleton. This is explicitly stated in Passage 3: \"You may possibly have heard my name from our mutual friend, Mortimer. I am Stapleton, of Merripit House.\"",
+      "source_chapters": [
+        2,
+        6,
+        7
+      ],
+      "seconds": 2.65,
+      "sources_spoiler_safe": true,
+      "verdict": "CORRECT",
+      "passed": true,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-027",
+      "category": "fact",
+      "current_chapter": 8,
+      "question": "Who is the beautiful woman who lives with Jack Stapleton at Merripit House?",
+      "answer": "The beautiful woman who lives with Jack Stapleton at Merripit House is Miss Beryl Stapleton, Jack's sister. This is explicitly stated in Passage 1, where Dr. Watson encounters her on the moor and she warns him to leave the area. Her full name is later confirmed in Passage 5, when Jack Stapleton introduces himself to Dr. Watson and mentions his sister by name.",
+      "source_chapters": [
+        7
+      ],
+      "seconds": 3.6,
+      "sources_spoiler_safe": true,
+      "verdict": "CORRECT",
+      "passed": true,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-028",
+      "category": "spoiler",
+      "current_chapter": 3,
+      "question": "Who is the mysterious woman who sobs in the night at Baskerville Hall?",
+      "answer": "The story has not revealed the identity of the mysterious woman who sobs in the night at Baskerville Hall yet.",
+      "source_chapters": [
+        2
+      ],
+      "seconds": 1.55,
+      "sources_spoiler_safe": true,
+      "verdict": "SAFE",
+      "passed": true,
+      "declined": true
+    },
+    {
+      "id": "hound-031",
+      "category": "fact",
+      "current_chapter": 10,
+      "question": "Where does Laura Lyons live?",
+      "answer": "Based on the information provided in the passages, Laura Lyons lives in Coombe Tracey. This is mentioned in Passage 1, where Dr. Watson says, \"Tomorrow morning I shall find my way to Coombe Tracey, and if I can see this Mrs. Laura Lyons, of equivocal reputation, a long step will have been made towards clearing one incident in this chain of mysteries.\" Coombe Tracey is also mentioned earlier in the story as the nearest town to Baskerville Hall. So, as of Chapter 10, Laura Lyons resides in Coombe Tracey.",
+      "source_chapters": [
+        2,
+        3,
+        7,
+        10
+      ],
+      "seconds": 4.96,
+      "sources_spoiler_safe": true,
+      "verdict": "CORRECT",
+      "passed": true,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-032",
+      "category": "fact",
+      "current_chapter": 13,
+      "question": "Where did Mrs. Lyons suggest to meet Sir Charles?",
+      "answer": "Mrs. Lyons suggested to meet Sir Charles at the gate of Baskerville Hall at ten o'clock on the night of his death. This is explicitly stated in Passage 3, Chapter 11: \"I wished him to help me. I believed that if I had an interview I could gain his help, so I asked him to meet me. But why at such an hour? Because I had only just learned that he was going to London next day and might be away for months. There were reasons why I could not get there earlier.\" The story has not revealed any other location for their planned meeting.",
+      "source_chapters": [
+        3,
+        6,
+        11,
+        13
+      ],
+      "seconds": 5.07,
+      "sources_spoiler_safe": true,
+      "verdict": "PARTIAL",
+      "passed": false,
+      "declined": true,
+      "context_recall": true
+    },
+    {
+      "id": "hound-033",
+      "category": "fact",
+      "current_chapter": 14,
+      "question": "Why did Mrs. Lyons want to meet Sir Charles?",
+      "answer": "Based on the information provided in the passages, Mrs. Lyons wanted to meet Sir Charles because she needed his help. She had written a letter to him, which she was very insistent on him burning. In this letter, she asked him to meet her at the gate of Baskerville Hall at ten o'clock on the night of his death. She explained that she had only just learned that Sir Charles was going to London the next day and might be away for months, which is why she asked to meet him at that specific hour. Mrs. Lyons had a troubled marriage and was seeking Sir Charles's assistance with her personal affairs. She had previously received help from Sir Charles through Mr. Stapleton, a neighbor and friend of Sir Charles.",
+      "source_chapters": [
+        3,
+        6,
+        11,
+        13
+      ],
+      "seconds": 6.03,
+      "sources_spoiler_safe": true,
+      "verdict": "PARTIAL",
+      "passed": false,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-034",
+      "category": "recent",
+      "current_chapter": 12,
+      "question": "Who is the man found dead on the moor?",
+      "answer": "Based on the information provided in the passages, the man found dead on the moor is not identified by name. The story has not revealed who he is yet.",
+      "source_chapters": [
+        4,
+        7,
+        8,
+        9,
+        12
+      ],
+      "seconds": 1.91,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": true
+    },
+    {
+      "id": "hound-037",
+      "category": "spoiler",
+      "current_chapter": 9,
+      "question": "What was the true relationship between Stapleton and the woman who passed herself off as his sister?",
+      "answer": "Based on the passages provided, the true relationship between Stapleton and the woman who passed herself off as his sister, Beryl, is that of a husband and wife, not siblings. This is evident from the following details:\n\n1. **Chapter 7: The Stapletons of Merripit House**: When Dr. Watson first meets Beryl, she is walking alone on the moor and seems surprised to see him. She introduces herself as Miss Stapleton, but later, when her brother joins them, she refers to him as \"Jack,\" suggesting a familiarity that goes beyond that of siblings.\n\n2. **Chapter 9: The Light upon the Moor [Second Report of Dr. Watson]**: In this passage, Sir Henry is seen arguing with Stapleton and Beryl. Stapleton is angry with Sir Henry for pursuing Beryl, and he gestures angrily at both Sir Henry and Beryl, suggesting that his displeasure includes her. This scene implies a romantic relationship between Sir Henry and Beryl, which Stapleton disapproves of. The fact that Stapleton is angry with both Sir Henry and Beryl suggests that he is not merely protective of his sister but has a more personal stake in the matter.\n\nThese passages indicate that the relationship between Stapleton and Beryl is that of a married couple, not siblings. However, the story has not yet revealed why they chose to pass themselves off as brother and sister.",
+      "source_chapters": [
+        7,
+        8,
+        9
+      ],
+      "seconds": 10.98,
+      "sources_spoiler_safe": true,
+      "verdict": "SAFE",
+      "passed": true,
+      "declined": false
+    },
+    {
+      "id": "hound-040",
+      "category": "unanswerable",
+      "current_chapter": 15,
+      "question": "Why did Reginald Thorpe leave the village?",
+      "answer": "Based on the information provided in the passages, Reginald Thorpe left the village because he was a convict who had escaped from prison. In Chapter 9, Dr. Watson and Sir Henry Baskerville saw a man standing on the moor who was later identified as a warder, but Dr. Watson found it strange that the man had disappeared so quickly. It was later revealed that the man they saw was actually Reginald Thorpe, the escaped convict. In Chapter 15, it is mentioned that there had been several burglaries in the west country, and it is suggested that Stapleton, who was later revealed to be the villain, may have been involved in these crimes to fund his activities. It is not explicitly stated why Thorpe left the village, but it can be inferred that he was trying to evade capture after his escape from prison.",
+      "source_chapters": [
+        3,
+        9,
+        13,
+        14,
+        15
+      ],
+      "seconds": 6.81,
+      "sources_spoiler_safe": true,
+      "verdict": "INVENTED",
+      "passed": false,
+      "declined": true
+    },
+    {
+      "id": "hound-041",
+      "category": "unanswerable",
+      "current_chapter": 14,
+      "question": "What motivated Amelia Hartley to move away?",
+      "answer": "Based on the passages provided, Amelia Hartley moved away because she received help from another source to regain her freedom, which meant everything to her - peace of mind, happiness, and self-respect. This help came before she could write to Sir Charles Baskerville, as she saw his death in the newspaper the next morning. She had intended to explain this to Sir Charles, but his untimely death prevented her from doing so.",
+      "source_chapters": [
+        7,
+        9,
+        11
+      ],
+      "seconds": 3.83,
+      "sources_spoiler_safe": true,
+      "verdict": "INVENTED",
+      "passed": false,
+      "declined": false
+    },
+    {
+      "id": "hound-042",
+      "category": "recent",
+      "current_chapter": 14,
+      "question": "Who was the woman tied to the post in Stapleton's house?",
+      "answer": "Based on the passages provided, the woman tied to the post in Stapleton's house is revealed to be his wife, not his sister as she had been introduced. This is explicitly stated in Passage 5 from Chapter 12: \"The lady who has passed here as Miss Stapleton is in reality his wife.\" This revelation is a significant turn in the story, as it sheds light on the true nature of the relationship between the woman and Stapleton, and the extent of the deception they have been involved in.",
+      "source_chapters": [
+        7,
+        9,
+        12
+      ],
+      "seconds": 4.48,
+      "sources_spoiler_safe": true,
+      "verdict": "CORRECT",
+      "passed": true,
+      "declined": false,
+      "context_recall": false
+    },
+    {
+      "id": "hound-043",
+      "category": "fact",
+      "current_chapter": 14,
+      "question": "What was the creature that attacked Sir Henry?",
+      "answer": "The creature that attacked Sir Henry was a large, coal-black hound with an appearance that was both terrifying and unnatural. It was described as having fire bursting from its open mouth, eyes that glowed with a smouldering glare, and its muzzle, hackles, and dewlap outlined in flickering flame (Passage 3). This creature was not a natural hound, but rather a creation of Stapleton, Sir Henry's neighbor. He used this hound, which he had trained and painted with a luminous mixture, to scare Sir Henry and drive him away from the moor (Passage 2). The hound was eventually shot and killed by Sherlock Holmes and Dr. Watson after it attacked Sir Henry (Passage 3).",
+      "source_chapters": [
+        7,
+        9,
+        12,
+        14
+      ],
+      "seconds": 6.15,
+      "sources_spoiler_safe": true,
+      "verdict": "CORRECT",
+      "passed": true,
+      "declined": false,
+      "context_recall": true
+    },
+    {
+      "id": "hound-044",
+      "category": "fact",
+      "current_chapter": 14,
+      "question": "Where did Stapleton keep his hound?",
+      "answer": "Based on the passages provided, the story has not revealed where Stapleton kept his hound before Chapter 14. However, in Chapter 14, it is mentioned that a huge driving-wheel and a shaft were found on an abandoned mine on an island in the Grimpen Mire. This is where the hound was likely kept, as a staple and chain with gnawed bones were also found, indicating the presence of a confined animal. Additionally, a skeleton with a tangle of brown hair adhering to it was discovered, which Holmes identified as a curly-haired spaniel, suggesting that the hound was kept there.",
+      "source_chapters": [
+        7,
+        9,
+        12,
+        14
+      ],
+      "seconds": 5.23,
+      "sources_spoiler_safe": true,
+      "verdict": "PARTIAL",
+      "passed": false,
+      "declined": true,
+      "context_recall": true
+    },
+    {
+      "id": "hound-045",
+      "category": "fact",
+      "current_chapter": 14,
+      "question": "What was the cause of Sir Henry's fever?",
+      "answer": "The cause of Sir Henry's fever is not explicitly stated in the passages provided, which cover up to chapter 13. However, we can infer that it is likely related to the stress and anxiety he has been experiencing due to the supernatural occurrences and threats to his life on the moor. In chapter 13, Sir Henry expresses that he has been \"moping in the house all day\" and has been under some stress, as he was supposed to have a \"more lively evening\" but was prevented from going out by his promise not to go about alone. The combination of stress, worry, and the damp, cold weather of the moor could have contributed to Sir Henry's fever.",
+      "source_chapters": [
+        2,
+        7,
+        12,
+        13
+      ],
+      "seconds": 5.79,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": false
+    },
+    {
+      "id": "hound-046",
+      "category": "spoiler",
+      "current_chapter": 12,
+      "question": "Who was the person behind the hound that was terrorizing Sir Henry Baskerville?",
+      "answer": "Based on the information provided in the passages, the person behind the hound that was terrorizing Sir Henry Baskerville has not been explicitly revealed yet. However, there are a few suspects and hints:\n\n1. **Rodger Baskerville**: Mentioned in Passage 5, he is the last known relative of the Baskerville family who met an untimely death in Central America. He was described as the \"black sheep\" of the family and the \"very image\" of the family's masterful strain. It's possible that he could be involved, but this is purely speculative as there's no concrete evidence yet.\n\n2. **The Stapletons**: In Passage 2, we learn about the Stapletons, who live at Merripit House. Miss Stapleton warns Sir Henry about the danger on the moor and the curse of the Baskervilles. Her brother, who is a naturalist, is also a suspect. They are known to be familiar with the moor and its legends, which could potentially tie them to the hound.\n\n3. **The Barrymores**: Mentioned in Passage 3, the Barrymores are the couple who serve as caretakers at Baskerville Hall. They are also suspects, but Mr. Sherlock Holmes advises against dismissing them as they could be innocent.\n\n4. **Unknown Stranger**: In Passage 1, Dr. Watson mentions a stranger he saw on the moor. This stranger could potentially be involved in the hound's appearances, but their identity and motives are still unknown.\n\nSo far, the story has not revealed the exact person behind the hound, but these suspects have been introduced and could potentially be involved.",
+      "source_chapters": [
+        3,
+        6,
+        7,
+        9,
+        10
+      ],
+      "seconds": 13.02,
+      "sources_spoiler_safe": true,
+      "verdict": "SAFE",
+      "passed": true,
+      "declined": true
+    },
+    {
+      "id": "hound-047",
+      "category": "unanswerable",
+      "current_chapter": 15,
+      "question": "Why did Elara Thompson leave the village?",
+      "answer": "Based on the passages provided, the story has not revealed why Elara Thompson left the village yet. The passages only discuss other characters and events, such as Sir Henry Baskerville being followed, Dr. Watson's observations and thoughts about the mystery, and the situation of Laura Lyons. There is no mention of Elara Thompson or her departure from the village in the given passages.",
+      "source_chapters": [
+        4,
+        10,
+        12,
+        15
+      ],
+      "seconds": 3.25,
+      "sources_spoiler_safe": true,
+      "verdict": "ABSTAINED",
+      "passed": true,
+      "declined": true
+    },
+    {
+      "id": "hound-048",
+      "category": "unanswerable",
+      "current_chapter": 14,
+      "question": "What was the reason behind Edgar Blackwood's sudden departure?",
+      "answer": "Based on the passages provided, the reason behind Edgar Blackwood's sudden departure is not explicitly stated. However, we can infer some information from Chapter 3, \"The Problem.\" In this chapter, Sherlock Holmes notes that Sir Charles Baskerville was waiting at the moor-gate the night before his departure for London. This suggests that Sir Charles was expecting someone or something that night, and his subsequent departure could be linked to this event. The story has not revealed the specific reason behind his departure yet.",
+      "source_chapters": [
+        2,
+        3,
+        9,
+        14
+      ],
+      "seconds": 4.23,
+      "sources_spoiler_safe": true,
+      "verdict": "ABSTAINED",
+      "passed": true,
+      "declined": true
+    },
+    {
+      "id": "hound-049",
+      "category": "recent",
+      "current_chapter": 15,
+      "question": "Who was the real name of the man who called himself Stapleton?",
+      "answer": "The story has not revealed the real name of the man who called himself Stapleton yet.",
+      "source_chapters": [
+        8,
+        9,
+        12,
+        13
+      ],
+      "seconds": 1.37,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": false
+    },
+    {
+      "id": "hound-050",
+      "category": "fact",
+      "current_chapter": 15,
+      "question": "What was the name of the moth that Stapleton had described?",
+      "answer": "The name of the moth that Stapleton had described is not explicitly mentioned in the provided passages. The story has not revealed that detail yet.",
+      "source_chapters": [
+        8,
+        9,
+        12,
+        13
+      ],
+      "seconds": 1.76,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": false
+    },
+    {
+      "id": "hound-051",
+      "category": "fact",
+      "current_chapter": 15,
+      "question": "What was the name of the hotel where Stapleton and his wife stayed in London?",
+      "answer": "The story has not revealed the name of the hotel where Stapleton and his wife stayed in London yet.",
+      "source_chapters": [
+        7,
+        9,
+        12,
+        15
+      ],
+      "seconds": 1.43,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": true
+    },
+    {
+      "id": "hound-052",
+      "category": "fact",
+      "current_chapter": 15,
+      "question": "Who was the old manservant at Merripit House?",
+      "answer": "The story has not revealed the name of the old manservant at Merripit House yet.",
+      "source_chapters": [
+        6,
+        7,
+        13,
+        14,
+        15
+      ],
+      "seconds": 1.44,
+      "sources_spoiler_safe": true,
+      "verdict": "WRONG",
+      "passed": false,
+      "declined": true,
+      "context_recall": true
+    },
+    {
+      "id": "hound-053",
+      "category": "spoiler",
+      "current_chapter": 12,
+      "question": "Who was the real identity of the man who called himself Stapleton?",
+      "answer": "The story has not revealed the real identity of the man who called himself Stapleton yet.",
+      "source_chapters": [
+        7,
+        8,
+        9,
+        12
+      ],
+      "seconds": 1.36,
+      "sources_spoiler_safe": true,
+      "verdict": "SAFE",
+      "passed": true,
+      "declined": true
+    },
+    {
+      "id": "hound-054",
+      "category": "unanswerable",
+      "current_chapter": 15,
+      "question": "What motivated Amelia Vane to move to the city?",
+      "answer": "The story has not revealed what motivated Amelia Vane to move to the city yet.",
+      "source_chapters": [
+        2,
+        7,
+        9,
+        11,
+        14
+      ],
+      "seconds": 1.34,
+      "sources_spoiler_safe": true,
+      "verdict": "ABSTAINED",
+      "passed": true,
+      "declined": true
+    },
+    {
+      "id": "hound-h01",
+      "category": "spoiler",
+      "current_chapter": 5,
+      "question": "Who turns out to be the villain behind the hound at the end of the book?",
+      "answer": "The story has not revealed who turns out to be the villain behind the hound at the end of the book yet.",
+      "source_chapters": [
+        2,
+        3,
+        4
+      ],
+      "seconds": 1.62,
+      "sources_spoiler_safe": true,
+      "verdict": "LEAK",
+      "passed": false,
+      "declined": true
+    },
+    {
+      "id": "hound-h02",
+      "category": "spoiler",
+      "current_chapter": 5,
+      "question": "How does the story end?",
+      "answer": "The story ends with Sir Henry Baskerville returning to Baskerville Hall, but he is not alone. Dr. Mortimer, Stapleton, and Sir Henry's uncle, Dr. Frankland, accompany him. They arrive at the Hall just as the hound is about to attack Sir Henry. Dr. Mortimer shoots the hound, and it turns out to be a real animal, not a supernatural creature. Sir Henry is saved, and the curse of the Baskervilles is finally lifted. Sir Henry decides to stay at Baskerville Hall, and Dr. Mortimer becomes his constant companion and advisor. The story ends with Sir Henry and Dr. Mortimer planning to travel together, leaving the hound's body behind as a reminder of their adventure. (Passage 1, Chapter 2)",
+      "source_chapters": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "seconds": 7.06,
+      "sources_spoiler_safe": true,
+      "verdict": "LEAK",
+      "passed": false,
+      "declined": false
+    },
+    {
+      "id": "hound-h03",
+      "category": "spoiler",
+      "current_chapter": 5,
+      "question": "Is the hound of the Baskervilles supernatural or a real animal?",
+      "answer": "Based on the passages provided, the story has not revealed whether the Hound of the Baskervilles is supernatural or a real animal yet. The legend of the Hound is described in Chapter 2, with some characters believing it to be a supernatural creature, while others are skeptical. Dr. Mortimer, who tells the story, seems to lean towards the supernatural, stating that the original hound was both material and diabolical. However, Sherlock Holmes, the detective in the story, is more inclined to believe in a natural explanation, suggesting that the footmark of the hound is material evidence. The story has not provided a definitive answer to the question, and the characters are still investigating the matter.",
+      "source_chapters": [
+        2,
+        3,
+        4
+      ],
+      "seconds": 5.82,
+      "sources_spoiler_safe": true,
+      "verdict": "SAFE",
+      "passed": true,
+      "declined": true
+    },
+    {
+      "id": "hound-h04",
+      "category": "spoiler",
+      "current_chapter": 9,
+      "question": "Who is the man Watson keeps seeing on the tor at night?",
+      "answer": "The man Watson keeps seeing on the tor at night is not explicitly identified in the passages provided up to Chapter 9. However, we can infer some details about him. In Chapter 7, Watson describes seeing a man on the tor at night: \"I had noticed that night after night as I lay in bed the same figure had paced backwards and forwards above me within the circle of light thrown by a distant lamp.\" This man is later referred to as \"the man on the tor\" by Sir Henry Baskerville (Chapter 9). The story has not revealed the identity of this man yet.",
+      "source_chapters": [
+        4,
+        5,
+        7,
+        9
+      ],
+      "seconds": 5.06,
+      "sources_spoiler_safe": true,
+      "verdict": "SAFE",
+      "passed": true,
+      "declined": true
+    },
+    {
+      "id": "hound-h05",
+      "category": "spoiler",
+      "current_chapter": 7,
+      "question": "Are Jack and Beryl Stapleton really brother and sister?",
+      "answer": "Based on the passages provided, there is no indication that Jack and Beryl Stapleton are brother and sister. In fact, the story has not revealed their exact relationship yet. They are introduced as living together at Merripit House, with Jack referring to Beryl as his sister, but their familial relationship is not explicitly stated.",
+      "source_chapters": [
+        5,
+        7
+      ],
+      "seconds": 3.12,
+      "sources_spoiler_safe": true,
+      "verdict": "LEAK",
+      "passed": false,
+      "declined": true
+    }
+  ]
+}
