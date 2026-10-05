@@ -194,14 +194,21 @@ docker compose up -d    # back to the real model
 
 `eval/` holds a question set for *The Hound of the Baskervilles* (public domain) and the
 scripts that made and score it. `generate_set.py` drafts questions for any book with an LLM
-and keeps only those it can check (answers must quote the chapter verbatim; invented names
-must be absent from the whole book); the set was then reviewed by hand
-(`sets/hound.review.json`). `run_eval.py` sends each question through `/query` at its
-reading position and scores retrieval in code and answers with an LLM judge;
-`--no-retrieval` asks the model directly instead, as a chatbot would be asked.
+and keeps only those it can check: answers must quote the chapter verbatim, and invented names
+must be absent from the whole book. The set was then reviewed by hand
+(`sets/hound.review.json`), and `sets/hound.reveals.json` lists the book's reveals with the
+chapter each happens in.
+
+`run_eval.py` sends each question through `/query` at its reading position. Scoring is done in
+code where possible, because a local LLM judge disagreed with hand grades too often: fact
+answers by key terms, spoilers by names the book only mentions after the reader's chapter,
+with pattern matches flagged for review. `--rejudge` re-scores stored answers and `--labels`
+measures the scoring against hand grades (`labels/hound.json`). `--no-retrieval` asks the model
+directly instead, as a chatbot would be asked.
 
 ```bash
-python eval/run_eval.py --set eval/sets/hound.jsonl --novel-id 4
+python eval/run_eval.py --set eval/sets/hound.jsonl --novel-id 4 \
+  --source data/novels/hound.epub --source-type epub
 ```
 
 ## Data

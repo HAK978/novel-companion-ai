@@ -1,0 +1,57 @@
+[
+ {
+  "chapter": 7,
+  "fact": "The woman heard sobbing at night in Baskerville Hall is Mrs. Barrymore.",
+  "pattern": "(Mrs\\.? Barrymore|Barrymore's wife).{0,120}(sob|wept|weep|cry|tears)|(sob|wept|weep|cry|tears).{0,120}(Mrs\\.? Barrymore|Barrymore's wife)"
+ },
+ {
+  "chapter": 9,
+  "fact": "Barrymore's signals across the moor at night are for the escaped convict Selden, Mrs. Barrymore's brother.",
+  "pattern": "Selden.{0,150}(brother|signal)|(brother|signal).{0,150}Selden"
+ },
+ {
+  "chapter": 11,
+  "fact": "The man Watson sees on the tor is Sherlock Holmes, secretly living on the moor.",
+  "pattern": "Holmes.{0,120}\\b(tor|hut|hiding|living on the moor|secretly)|\\b(man|figure) on the tor.{0,120}Holmes"
+ },
+ {
+  "chapter": 12,
+  "fact": "Stapleton is the culprit behind the hound and Sir Charles's death.",
+  "pattern": "Stapleton.{0,100}(villain|culprit|murder|behind the hound|responsible|killer)|(villain|culprit|murderer|behind the hound).{0,100}Stapleton"
+ },
+ {
+  "chapter": 12,
+  "fact": "Miss Stapleton is really Stapleton's wife, not his sister.",
+  "pattern": "Stapleton'?s? wife|his wife.{0,60}Stapleton|not (really )?(his )?sister|not (really )?(brother and sister|siblings)|no indication.{0,60}(brother|sister|siblings)|husband and wife"
+ },
+ {
+  "chapter": 12,
+  "fact": "Selden dies on the moor, mistaken for Sir Henry.",
+  "pattern": "Selden.{0,80}(dies|died|dead|killed|death)|(dead|death|killed).{0,80}Selden"
+ },
+ {
+  "chapter": 13,
+  "fact": "Stapleton is a Baskerville (he resembles the portrait of Hugo Baskerville).",
+  "pattern": "Stapleton.{0,80}(is|was|really) a Baskerville|Stapleton.{0,120}(Rodger|heir)|Rodger.{0,80}(Stapleton|disguise|alias)"
+ },
+ {
+  "chapter": 14,
+  "fact": "The hound is a real dog made to glow with phosphorus, and Holmes shoots it dead.",
+  "pattern": "phosphor|\\b(is|was) (just |actually |really )?(a |an )?(real|ordinary|actual|flesh)[- ](and[- ]blood )?(dog|hound|animal)|(shot|shoots|kills?|killed|emptied).{0,60}hound|hound.{0,40}(was|is) (shot|killed|dead)"
+ },
+ {
+  "chapter": 14,
+  "fact": "Stapleton dies, lost in the Grimpen Mire.",
+  "pattern": "Stapleton.{0,120}(mire|bog).{0,80}(die|died|death|drown|lost|swallow|perish)|(died|drowned|perished|swallowed).{0,80}(mire|bog)"
+ },
+ {
+  "chapter": 15,
+  "fact": "Stapleton's real name is Rodger Baskerville, son of Sir Charles's younger brother; his wife is Beryl Garcia of Costa Rica.",
+  "pattern": "Garcia|Costa Rica|Rodger Baskerville.{0,80}(son|real name|Stapleton)|Stapleton.{0,80}Rodger|Rodger.{0,120}(wife|married).{0,40}Beryl"
+ },
+ {
+  "chapter": 15,
+  "fact": "Stapleton was the bearded man watching from the cab in London.",
+  "pattern": "Stapleton.{0,100}\\bcab\\b|\\bcab\\b.{0,100}Stapleton"
+ }
+]

@@ -14,5 +14,21 @@
     "hound-039": "duplicate reveal of hound-037"
   },
   "added_by_hand": 5,
-  "final": 49
+  "final": 47,
+  "second_review": {
+    "date": "2026-10-05",
+    "dropped": {
+      "hound-037": "the question states the twist itself ('passed herself off as his sister')",
+      "hound-046": "not a spoiler at chapter 12: chapter 12 already names Stapleton as the culprit"
+    },
+    "reworded": {
+      "hound-053": "asked 'the real identity of the man who called himself Stapleton', which presupposes an alias"
+    },
+    "accepted_answers_widened": {
+      "hound-007": "chapter 2 says he was last heard of in America",
+      "hound-021": "Holmes gives several warnings in chapter 6",
+      "hound-022": "Holmes gives several pieces of advice in chapter 6"
+    },
+    "reveal_chapters_checked_against_text": true
+  }
 }

@@ -53,3 +53,6 @@ data/novels/*
 
 # Evaluation set for a public-domain book (other books' sets stay local)
 !eval/sets/hound.jsonl
+
+# Experiment outputs derived from copyrighted books
+eval/experiments/out/

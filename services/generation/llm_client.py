@@ -66,8 +66,9 @@ def system_prompt(current_chapter: int | None) -> str:
     return (
         "You are a spoiler-free reading companion. " + position
         + "Answer only from the passages you are given. You may recognize this book: never use "
-        f"that knowledge, and {limit}. If the passages do not answer a question, say the story "
-        "has not revealed that yet."
+        f"that knowledge, and {limit}. If the passages do not answer a question, say you "
+        "could not find it in what the reader has read, without saying or implying whether it "
+        "comes up later."
     )
 
 
@@ -85,9 +86,19 @@ def _spoiler_rules(current_chapter: int | None) -> str:
         "- Use ONLY the passages above. Do not use anything you may know about this book from "
         "anywhere else, even if you recognize it."
     )
+    # "The story has not revealed that yet" was false whenever retrieval had simply missed
+    # (12 of 30 answerable questions in the Hound eval), and "yet" itself hints that a
+    # reveal is coming. Questions about people who never appear were answered about someone
+    # else in the passages (7 of 10).
     rules.append(
-        "- If the passages do not answer the question, say the story has not revealed that "
-        "yet. Do not guess or speculate about what happens later."
+        "- If the passages do not answer the question, say you couldn't find it in the "
+        "chapters the reader has read. Never say or imply that it is revealed later, and do "
+        "not guess."
+    )
+    rules.append(
+        "- If the question asks about a person, place or thing the passages never mention, say "
+        "you couldn't find them in what the reader has read. Never answer as if the question "
+        "were about someone else who does appear."
     )
     return "\n".join(rules)
 

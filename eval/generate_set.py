@@ -81,7 +81,7 @@ events ("what happened at the meeting?") are not.
 
 Question: {question}
 
-Answer with one word: YES or NO."""
+First give one sentence of reasoning. Then on a new line write only YES or NO."""
 
 
 def llm(prompt: str, max_tokens: int = 1500) -> str:
@@ -127,7 +127,9 @@ def well_formed(question: str) -> bool:
 
 
 def self_contained(question: str) -> bool:
-    return llm(CHECK_PROMPT.format(question=question), max_tokens=3).strip().upper().startswith("Y")
+    verdicts = re.findall(r"\b(YES|NO)\b", llm(CHECK_PROMPT.format(question=question),
+                                                   max_tokens=150).upper())
+    return bool(verdicts) and verdicts[-1] == "YES"
 
 
 def main():
@@ -146,13 +148,14 @@ def main():
     whole_book = normalize(" ".join(texts.values()))
     items, dropped = [], {"no_quote": 0, "not_self_contained": 0, "name_in_book": 0}
 
-    def keep(category, question, answer, evidence, source, position):
+    def keep(category, question, answer, evidence, source, position, **extra):
         items.append({
             "id": f"{args.book}-{len(items) + 1:03d}", "category": category,
             "question": question, "current_chapter": position,
             "reference_answer": answer, "evidence": evidence,
             "expected_source_chapters": [source] if category in ("fact", "recent") else [],
             "reveal_chapter": source if category == "spoiler" else None,
+            "accepted_answers": [answer], **extra,
         })
 
     for n, text in texts.items():
@@ -190,7 +193,8 @@ def main():
             if not absent_from(name, whole_book):
                 dropped["name_in_book"] += 1
                 continue
-            keep("unanswerable", q, "The book does not say.", "", n, rng.randint(n, last))
+            keep("unanswerable", q, "The book does not say.", "", n, rng.randint(n, last),
+                 invented_name=name)
 
     out = ROOT / "eval" / "sets" / f"{args.book}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -173,7 +173,8 @@ def test_prompt_forbids_outside_knowledge_and_knows_the_reading_position(service
     assert "read up to chapter 5" in prompt
     assert "after chapter 5" in prompt
     assert "Use ONLY the passages" in prompt
-    assert "not revealed that yet" in prompt
+    assert "couldn't find it in the" in prompt
+    assert "Never answer as if the question" in prompt
 
 
 def test_prompt_without_a_position_still_forbids_outside_knowledge(service, endpoint):

@@ -6,9 +6,11 @@ on:
   pull_request:
     branches: [master, main]
 
+# Runner image pinned like the dependencies: ubuntu-latest moves to a new release on its own
+# schedule, which can break CI with no change here.
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     # The db test tier runs migrations and real SQL against this throwaway database.
     services:
@@ -54,7 +56,7 @@ jobs:
     # Builds every image and runs the whole application in Compose, with a stub model
     # server in place of vLLM, then tests it end to end through the gateway. A Dockerfile
     # that stops building or a service that stops starting fails here.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     env:
@@ -89,7 +91,7 @@ jobs:
         run: docker compose ps -a && docker compose logs --no-color
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -106,7 +108,7 @@ jobs:
         run: ruff check services/ tests/ scripts/ eval/ --output-format=github
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend

@@ -21,8 +21,8 @@ scoped to the reader's progress.
   n_results, character lookup from PostgreSQL.
 - **Generation** (8003) — `services/generation/`. One OpenAI-compatible client
   (`llm_client.py`) configured by `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY`; the default
-  is the compose `vllm` service (`http://vllm:8000/v1`, host port 8004). No GPU code: an unreachable endpoint is a 502 and `/health` says
-  degraded. Answers send spoiler rules as a system message plus the reader's chapter.
+  is the compose `vllm` service (`http://vllm:8000/v1`, host port 8004). No GPU code: an
+  unreachable endpoint is a 502 and `/health` says degraded. Answers send spoiler rules as a system message plus the reader's chapter.
   Endpoints: /generate, /extract-entities, /models, /health.
 - **MCP** — `services/mcp/server.py`, 8 tools over stdio. Spoiler rule enforced
   server-side: content tools resolve stored progress and clamp requested chapters to it.
@@ -105,6 +105,18 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
 - Chroma is pinned by digest: the tag `1.0.0` names a different image than the one that wrote
   the data.
 - vLLM has `restart: "no"`: on shared GPUs it must not reclaim a GPU after a reboot.
+- Never pipe `scripts/start_vllm.sh` into `head` or similar: the closed pipe kills the script
+  before `docker compose up` runs, and the model silently never starts.
+- **Evaluation scores in code, not with an LLM judge.** Mistral Nemo graded "not revealed" as
+  correct and passed invented answers. Fact answers use `key_terms`; leaks use names first
+  mentioned after the reader's chapter; reveal patterns only flag answers for review (they
+  overfit when written against graded answers). Check any scoring change with
+  `run_eval.py --rejudge <results> --labels eval/labels/hound.json`.
+- The answer prompt says "couldn't find it in the chapters the reader has read", never "the
+  story has not revealed that yet": that was false whenever retrieval missed, and "yet" hints
+  that a reveal is coming.
+- Map-reduce over many chapters with Nemo has poor precision: it reports "relevant" notes for
+  every block, then merges them into confident lists. Search first, then read what was found.
 
 ## Roadmap
 
