@@ -204,3 +204,19 @@ def test_extraction_needs_no_reader_position(service, endpoint):
     service.post("/extract-entities", json={"chapter_text": "t", "chapter_number": 3})
 
     assert [m["role"] for m in sent[0]["json"]["messages"]] == ["user"]
+
+
+def test_health_probe_of_the_model_is_short(monkeypatch):
+    # /health backs the container health check (4 s); a hanging model endpoint must not
+    # make the generation container look dead
+    seen = {}
+
+    def get(url, headers=None, timeout=None):
+        seen["timeout"] = timeout
+        raise httpx.ConnectTimeout("timed out")
+
+    monkeypatch.setattr(httpx, "get", get)
+    client_module = load_module("generation", "llm_client.py", alias="generation_llm_client_probe")
+
+    assert client_module.LLMClient().status()["status"] == "degraded"
+    assert seen["timeout"] <= 2

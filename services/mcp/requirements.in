@@ -1,0 +1,2 @@
+mcp==1.28.1  # the server targets the v1 API (FastMCP)
+httpx==0.28.1

@@ -43,3 +43,10 @@ ROADMAP.md
 # Local database backups and coverage data
 backups/
 .coverage
+
+# Local novel files mounted into the ingestion worker. The empty data/novels directory is
+# kept so that Docker does not create it, owned by root, on a fresh clone.
+data/*
+!data/novels/
+data/novels/*
+!data/novels/.gitkeep

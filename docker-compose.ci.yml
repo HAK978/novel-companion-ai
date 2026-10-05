@@ -1,0 +1,15 @@
+# Overlay for end-to-end runs without a GPU (CI): a stub model server stands in for vLLM.
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait
+services:
+  stub-llm:
+    build:
+      context: .
+      dockerfile: tests/stub_llm/Dockerfile
+
+  generation:
+    environment:
+      LLM_BASE_URL: http://stub-llm:8000/v1
+      LLM_MODEL: stub-model
+    depends_on:
+      stub-llm:
+        condition: service_healthy

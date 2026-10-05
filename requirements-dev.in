@@ -1,0 +1,23 @@
+# Direct test dependencies, pinned to the versions the suite is verified against.
+#
+# Lower bounds alone let CI test whatever was newest that day: mcp 2.x renamed the API the
+# MCP server uses, and SQLAlchemy 2.1 switched the default PostgreSQL driver to psycopg 3,
+# each breaking CI with no change to the code. Upgrade deliberately: bump a pin, run the
+# suite, commit both together.
+#
+# Service modules are imported directly, so their runtime libraries are needed too, minus
+# the GPU stack (imported lazily).
+
+pytest==9.1.1
+pytest-cov==7.1.0
+
+fastapi==0.136.3
+httpx==0.28.1
+pydantic==2.13.4
+sqlalchemy==2.0.50
+psycopg2-binary==2.9.12
+celery[redis]==5.6.3
+chromadb==1.5.9
+mcp==1.28.1
+numpy==2.3.3
+ebooklib==0.20

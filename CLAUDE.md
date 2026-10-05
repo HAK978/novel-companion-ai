@@ -21,14 +21,16 @@ scoped to the reader's progress.
   n_results, character lookup from PostgreSQL.
 - **Generation** (8003) — `services/generation/`. One OpenAI-compatible client
   (`llm_client.py`) configured by `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY`; the default
-  is local vLLM on :8004. No GPU code: an unreachable endpoint is a 502 and `/health` says
+  is the compose `vllm` service (`http://vllm:8000/v1`, host port 8004). No GPU code: an unreachable endpoint is a 502 and `/health` says
   degraded. Answers send spoiler rules as a system message plus the reader's chapter.
   Endpoints: /generate, /extract-entities, /models, /health.
 - **MCP** — `services/mcp/server.py`, 8 tools over stdio. Spoiler rule enforced
   server-side: content tools resolve stored progress and clamp requested chapters to it.
 - **Frontend** (3000) — `frontend/`, Next.js + TypeScript + Tailwind.
-- **Infra** — docker-compose.yml: PostgreSQL 16 (5432), Redis 7 (6379), ChromaDB
-  (host 8005 → container 8000). App services run via uvicorn on the host in dev.
+- **Compose** — docker-compose.yml runs everything: PostgreSQL 16 (5432), Redis 7 (6379),
+  ChromaDB (host 8005 → container 8000), a one-shot `migrate` job, the four services, the
+  Celery worker, the frontend, and vLLM under the `gpu` profile. Ports bind 127.0.0.1 only.
+  docker-compose.ci.yml swaps vLLM for a stub model (`tests/stub_llm/`) for e2e runs.
 
 ## Database
 
@@ -39,11 +41,16 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
 
 ## Operations
 
-- **Start everything:** `bash scripts/start_services.sh` (idempotent). Starts infra, applies
-  pending migrations, then vLLM (loads the model onto GPU, takes minutes), then services.
-- **Database state:** `python scripts/migrate.py --status`.
-- **Bulk ingest:** POST /ingest/from-source with `extract_entities: false` (default).
-  ~1s/chapter; extraction on is ~20s/chapter.
+- **Start everything:** `docker compose up -d` (all but the model); after code changes
+  `docker compose up -d --build`. The model: `scripts/start_vllm.sh` (idle GPU, ~2 min to
+  healthy); `docker compose stop vllm` releases the GPU. Never leave it running unattended.
+- **Database state:** `docker compose run --rm migrate python scripts/migrate.py --status`.
+- **Bulk ingest:** POST /ingest/from-source with `extract_entities: false` (default) and a
+  `source_path` under `/novels` (host `NOVEL_DATA_DIR`). ~1s/chapter; extraction ~20s/chapter.
+- **End-to-end tests:** run in a separate project so the dev data stays out:
+  `NOVEL_DATA_DIR=<dir> docker compose -p novel-e2e -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait`,
+  then `RUN_INTEGRATION=1 NOVEL_DATA_DIR=<dir> pytest -m integration` (stop the dev stack
+  first: same ports). Tear down with `down`, then `docker volume rm novel-e2e_...` by name.
 
 ## Gotchas — do not regress
 
@@ -80,11 +87,28 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
 - Never `pgrep -f`/`pkill -f` a pattern containing literal text from your own command (it
   matches the shell running it and kills it, exit 144). Use a bracket: `800[3]`, `vll[m]`.
 - In `tasks.py`, SQLAlchemy `text` is imported as `sa_text` to avoid shadowing.
+- **Never `docker compose down -v` on the dev project:** its volumes hold the ingested novels
+  (pg_dump backups live in `backups/`).
+- **Containers cannot reach the host here** (a firewall drops container-to-host traffic), so
+  the model runs as the compose `vllm` service, never a host process via host.docker.internal.
+- Dockerfiles copy code with `--chmod=755`: the host umask (007) makes files 660, unreadable
+  to the containers' non-root user.
+- The worker and vLLM run as `HOST_UID:HOST_GID` (read mounted novels; cache files stay the
+  user's). That UID has no passwd entry, so vLLM needs `USER` set (`getpass.getuser()`), and
+  its cache mounts at `/vllm-cache`: a mount under `/tmp/.cache` made Docker create that
+  directory as root and FlashInfer could not write beside it.
+- **No function-level imports of local modules in Celery tasks:** Celery puts the working
+  directory on `sys.path` only while importing the app. The host worker hid this because
+  `~/.bashrc` builds PYTHONPATH with a trailing `:` (an empty entry means the current directory).
+- Requirements are lockfiles: edit `requirements.in`, then `uv pip compile requirements.in
+  -o requirements.txt --python-version 3.12 --python-platform x86_64-manylinux_2_28`.
+- Chroma is pinned by digest: the tag `1.0.0` names a different image than the one that wrote
+  the data.
+- vLLM has `restart: "no"`: on shared GPUs it must not reclaim a GPU after a reboot.
 
 ## Roadmap
 
-Containerized services, evaluation harness (RAGAS
-metrics + deterministic spoiler-leakage check), populated character graph, hybrid search with
-reranking, SSE streaming, tracing via Langfuse/OpenTelemetry.
+Evaluation harness (RAGAS metrics + deterministic spoiler-leakage check), populated character
+graph, hybrid search with reranking, SSE streaming, tracing via Langfuse/OpenTelemetry.
 
 **Keep this file updated as work progresses** so a fresh session can resume from here.

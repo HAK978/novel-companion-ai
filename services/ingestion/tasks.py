@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import chromadb
 import httpx
+from adapters import get_adapter
 from celery import Celery
 from chunking import chunk_text, clean_html
 from config import (
@@ -303,8 +304,6 @@ def ingest_from_source(self, source_data: dict):
     source_data: {"novel_id": int, "source_type": str, "source_path": str,
                   "max_chapters": int|None, "extract_entities": bool}
     """
-    from adapters import get_adapter
-
     novel_id = source_data["novel_id"]
     source_type = source_data["source_type"]
     source_path = source_data["source_path"]

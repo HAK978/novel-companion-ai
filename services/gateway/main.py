@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 
 import httpx
@@ -28,6 +29,7 @@ app.add_middleware(
 )
 
 engine = create_engine(DATABASE_URL)
+HEALTH_TIMEOUT = 3  # seconds per downstream check; container probes allow 4
 
 # Database calls are synchronous. Handlers that only touch the database are plain `def`
 # (FastAPI runs those in a threadpool); handlers that also await other services push their
@@ -538,14 +540,19 @@ async def health():
         "retrieval": RETRIEVAL_SERVICE_URL,
         "generation": GENERATION_SERVICE_URL,
     }
-    status = {}
-    async with httpx.AsyncClient(timeout=5) as client:
-        for name, url in services.items():
-            try:
-                resp = await client.get(f"{url}/health")
-                status[name] = resp.json()
-            except Exception as e:
-                status[name] = {"status": "unreachable", "error": str(e)}
+    # Concurrently, with a short timeout: checked one after another at 5 s each, a single
+    # hanging service made this endpoint slower than the container's own health probe.
+    async def check(client, name, url):
+        try:
+            resp = await client.get(f"{url}/health")
+            return name, resp.json()
+        except Exception as e:
+            return name, {"status": "unreachable", "error": str(e)}
+
+    async with httpx.AsyncClient(timeout=HEALTH_TIMEOUT) as client:
+        status = dict(await asyncio.gather(
+            *(check(client, name, url) for name, url in services.items())
+        ))
 
     def ping_database():
         with engine.connect() as conn:

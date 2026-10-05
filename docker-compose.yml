@@ -1,129 +1,157 @@
+# The whole application. `docker compose up -d` builds and starts everything except the
+# language model, which is any OpenAI-compatible endpoint named by LLM_BASE_URL. To serve the
+# model locally on a GPU as well: `docker compose --profile gpu up -d` (or
+# scripts/start_vllm.sh, which picks an idle GPU). Settings come from .env; see .env.example.
+name: novel-companion-ai
+
+x-database-url: &database-url
+  DATABASE_URL: postgresql://${POSTGRES_USER:-novel}:${POSTGRES_PASSWORD:-novel}@postgres:5432/${POSTGRES_DB:-novel_companion}
+
+x-ingestion: &ingestion
+  build:
+    context: .
+    dockerfile: services/ingestion/Dockerfile
+  restart: unless-stopped
+  environment:
+    <<: *database-url
+    REDIS_URL: redis://redis:6379/0
+    CHROMADB_URL: http://chromadb:8000
+    GENERATION_SERVICE_URL: http://generation:8003
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+    chromadb:
+      condition: service_healthy
+
 services:
-  # --- Infrastructure ---
+  # --- Infrastructure. Ports are published on 127.0.0.1 only: they used to listen on every
+  # interface, putting a password-"novel" Postgres and an unauthenticated Redis on the
+  # network. "restart: unless-stopped" brings the stack back after a reboot.
 
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-novel}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-novel}
       POSTGRES_DB: ${POSTGRES_DB:-novel_companion}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # Schema comes from scripts/migrate.py, which records what it applies. The
-      # docker-entrypoint-initdb.d mount used before ran files once, recorded nothing,
-      # and never ran anything added later, which is how migration 003 went unapplied.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-novel} -d ${POSTGRES_DB:-novel_companion}"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
 
   chromadb:
-    image: chromadb/chroma:latest
+    # Pinned by digest: this exact image wrote the existing data. Its version tag ("1.0.0")
+    # names a different published image, so a tag would not identify it.
+    image: chromadb/chroma@sha256:1e0b73a187a28757c572acba508c46f48c9e8b0acaf5c20e6d95cdedce1acdf6
+    restart: unless-stopped
     ports:
-      - "8005:8000"
+      - "127.0.0.1:8005:8000"
     volumes:
-      # this image stores data at /data (see startup banner), not /chroma/chroma
       - chroma-data:/data
     ulimits:
-      # default 1024 exhausts during bulk ingestion; sqlite then fails with
-      # SQLITE_CANTOPEN and the store corrupts
+      # the default 1024 ran out during bulk ingestion; its SQLite store then failed
       nofile:
         soft: 65536
         hard: 65536
     healthcheck:
-      # image has no curl; bash /dev/tcp checks the port is accepting
+      # the image ships no curl; bash's /dev/tcp checks the port accepts connections
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8000"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  # --- Application Services ---
+  # --- Schema: applies pending migrations and records them, then exits. Everything that
+  # uses the database starts only after it succeeds.
+  migrate:
+    build:
+      context: .
+      dockerfile: migrations/Dockerfile
+    environment:
+      <<: *database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # --- Application
 
   gateway:
     build:
       context: .
       dockerfile: services/gateway/Dockerfile
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
-      - INGESTION_SERVICE_URL=http://ingestion:8001
-      - RETRIEVAL_SERVICE_URL=http://retrieval:8002
-      - GENERATION_SERVICE_URL=http://generation:8003
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-novel}:${POSTGRES_PASSWORD:-novel}@postgres:5432/${POSTGRES_DB:-novel_companion}
+      <<: *database-url
+      INGESTION_SERVICE_URL: http://ingestion:8001
+      RETRIEVAL_SERVICE_URL: http://retrieval:8002
+      GENERATION_SERVICE_URL: http://generation:8003
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       ingestion:
-        condition: service_started
+        condition: service_healthy
       retrieval:
-        condition: service_started
+        condition: service_healthy
       generation:
-        condition: service_started
+        condition: service_healthy
 
   ingestion:
-    build:
-      context: .
-      dockerfile: services/ingestion/Dockerfile
+    <<: *ingestion
     ports:
-      - "8001:8001"
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - CHROMADB_URL=http://chromadb:8000
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-novel}:${POSTGRES_PASSWORD:-novel}@postgres:5432/${POSTGRES_DB:-novel_companion}
-      - GENERATION_SERVICE_URL=http://generation:8003
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      chromadb:
-        condition: service_healthy
+      - "127.0.0.1:8001:8001"
 
   ingestion-worker:
-    build:
-      context: .
-      dockerfile: services/ingestion/Dockerfile
-    command: celery -A tasks worker --loglevel=info --concurrency=2
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - CHROMADB_URL=http://chromadb:8000
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-novel}:${POSTGRES_PASSWORD:-novel}@postgres:5432/${POSTGRES_DB:-novel_companion}
-      - GENERATION_SERVICE_URL=http://generation:8003
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      chromadb:
-        condition: service_healthy
+    <<: *ingestion
+    command: ["celery", "-A", "tasks.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    # Runs as the host user so it can read the mounted novel files, which are usually
+    # readable by their owner only. Set HOST_UID/HOST_GID in .env (`id -u`, `id -g`).
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    volumes:
+      # Ingest with source paths under /novels, e.g. /novels/my-book.epub
+      - ${NOVEL_DATA_DIR:-./data/novels}:/novels:ro
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 5 | grep -q pong"]
+      interval: 30s
+      timeout: 15s
+      start_period: 30s
+      retries: 3
 
   retrieval:
     build:
       context: .
       dockerfile: services/retrieval/Dockerfile
+    restart: unless-stopped
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"
     environment:
-      - CHROMADB_URL=http://chromadb:8000
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-novel}:${POSTGRES_PASSWORD:-novel}@postgres:5432/${POSTGRES_DB:-novel_companion}
+      <<: *database-url
+      CHROMADB_URL: http://chromadb:8000
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       chromadb:
         condition: service_healthy
 
@@ -131,13 +159,75 @@ services:
     build:
       context: .
       dockerfile: services/generation/Dockerfile
+    restart: unless-stopped
     ports:
-      - "8003:8003"
+      - "127.0.0.1:8003:8003"
     environment:
-      # any OpenAI-compatible endpoint; the default is vLLM on the host
-      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:8004/v1}
-      - LLM_MODEL=${LLM_MODEL:-mistralai/Mistral-Nemo-Instruct-2407}
-      - LLM_API_KEY=${LLM_API_KEY:-}
+      # the vllm service below by default; any OpenAI-compatible endpoint otherwise
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://vllm:8000/v1}
+      LLM_MODEL: ${LLM_MODEL:-mistralai/Mistral-Nemo-Instruct-2407}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+
+  # --- Language model, optional: needs a GPU, so it starts only with `--profile gpu`.
+  # It lives on the compose network rather than on the host because containers may not be
+  # able to reach the host at all (a host firewall dropping that traffic did exactly that on
+  # the development server).
+  vllm:
+    image: vllm/vllm-openai:v0.25.1
+    profiles: ["gpu"]
+    # Never restarted automatically: on a shared machine it should take a GPU only when
+    # started on one that was checked to be free (scripts/start_vllm.sh), not after a reboot
+    restart: "no"
+    # As the host user, so anything it writes into the mounted caches stays the user's
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    command:
+      - ${LLM_MODEL:-mistralai/Mistral-Nemo-Instruct-2407}
+      - --max-model-len=16384
+      - --gpu-memory-utilization=0.65
+    environment:
+      HOME: /tmp
+      # the host UID has no entry in the image's /etc/passwd, so getpass.getuser() (used by
+      # PyTorch to name its compile cache) needs a name from the environment
+      USER: vllm
+      HF_HOME: /hf
+      VLLM_CACHE_ROOT: /vllm-cache
+      # 1: serve only what is already in the cache; never start a multi-GB download
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+    volumes:
+      # model weights, reused rather than downloaded again
+      - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/hf
+      # compiled-kernel cache, so restarts skip recompiling. Mounted outside HOME: a mount
+      # under /tmp/.cache would make Docker create that directory as root, and other caches
+      # (FlashInfer's) then cannot be created beside it
+      - ${VLLM_CACHE_DIR:-${HOME}/.cache/vllm}:/vllm-cache
+    shm_size: 8gb
+    ports:
+      - "127.0.0.1:8004:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${VLLM_GPU:-0}"]
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 600s
+      retries: 3
+
+  frontend:
+    build:
+      context: frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      gateway:
+        condition: service_healthy
 
 volumes:
   postgres-data:

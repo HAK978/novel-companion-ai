@@ -1,0 +1,17 @@
+# Only source goes into build contexts: no secrets, data, caches or dependencies
+.env
+*.env
+!.env.example
+.git
+backups/
+logs/
+data/
+training/data/
+training/data_v2/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.coverage
+frontend/node_modules/
+frontend/.next/
+ROADMAP.md

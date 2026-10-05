@@ -378,3 +378,29 @@ def test_summary_tells_generation_its_clamped_end(client, wire):
 
     generate = next(c for c in calls if "/generate" in c["url"])
     assert generate["payload"]["current_chapter"] == 120
+
+
+def test_health_checks_services_concurrently(client, gateway_main, monkeypatch):
+    # sequential checks let one slow service push this past the container's health probe
+    import asyncio
+    import time
+
+    class Slow:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url, **kwargs):
+            await asyncio.sleep(0.5)
+            return type("R", (), {"json": lambda self: {"status": "ok"}})()
+
+    monkeypatch.setattr(gateway_main.httpx, "AsyncClient", lambda *a, **k: Slow())
+    monkeypatch.setattr(gateway_main, "engine", FakeEngine())
+
+    started = time.perf_counter()
+    body = client.get("/health").json()
+
+    assert time.perf_counter() - started < 1.0  # three 0.5 s checks, run together
+    assert all(body["services"][s]["status"] == "ok" for s in ("ingestion", "retrieval", "generation"))

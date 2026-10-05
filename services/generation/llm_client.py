@@ -138,7 +138,8 @@ class LLMClient:
     def status(self) -> dict:
         """Whether the endpoint is reachable and serving the configured model. Never raises."""
         try:
-            resp = httpx.get(f"{self.base_url}/models", headers=self._headers, timeout=5)
+            # short: this backs /health, which container probes give 4 s
+            resp = httpx.get(f"{self.base_url}/models", headers=self._headers, timeout=2)
             resp.raise_for_status()
             served = [m.get("id") for m in resp.json().get("data", [])]
         except (httpx.HTTPError, ValueError) as exc:

@@ -54,7 +54,8 @@ no-outside-knowledge rule now go to the model as a system message, which brought
 - **Gateway** — entry point; orchestrates retrieval → generation, manages novels and progress
 - **Ingestion** — Celery workers: clean HTML → chunk → embed → store; pluggable source adapters
 - **Retrieval** — vector search with chapter filtering and range scoping
-- **Generation** — LLM inference via vLLM, falling back to transformers or the OpenAI API
+- **Generation** — prompts and calls to the language model: any OpenAI-compatible endpoint,
+  vLLM by default
 
 ## Stack
 
@@ -79,41 +80,57 @@ Docker Compose
 Content tools read stored progress and clamp the requested chapter to it, so the scoping
 holds no matter what the client asks for.
 
+Claude Code picks it up from `.mcp.json` when started in this repository (the server needs
+`pip install -r services/mcp/requirements.txt`). To use it from any directory:
+
 ```bash
 claude mcp add novel-companion --scope user \
   --env GATEWAY_URL=http://localhost:8000 \
-  -- python /path/to/services/mcp/server.py
+  -- python3 /path/to/services/mcp/server.py
 ```
 
 ## Running it
 
-Needs Docker, Python 3.10+, and a CUDA GPU for local inference, or any hosted
-OpenAI-compatible endpoint instead (set `LLM_BASE_URL`, `LLM_MODEL` and `LLM_API_KEY`).
+Needs Docker with Compose. The language model can be any OpenAI-compatible endpoint: by
+default Compose serves Mistral Nemo with vLLM on an NVIDIA GPU, or set `LLM_BASE_URL`,
+`LLM_MODEL` and `LLM_API_KEY` in `.env` to use a hosted model and skip the GPU.
 
 ```bash
 cp .env.example .env
-bash scripts/start_services.sh
+docker compose up -d                  # everything except the model server
+docker compose --profile gpu up -d    # also serve the model with vLLM
 ```
 
-That starts PostgreSQL, Redis, and ChromaDB, applies any pending database migrations, brings
-up vLLM, then the four services. For the web UI: `cd frontend && npm install && npm run dev`.
+The first start builds the images. The web UI is then at http://localhost:3000, and
+`curl localhost:8000/health` reports on every service. Ports are published on localhost only.
+Services come back on their own after a reboot, but the model server does not: on a shared
+machine, `scripts/start_vllm.sh` starts it on an idle GPU and `docker compose stop vllm`
+releases it.
 
-Schema changes go through `scripts/migrate.py`, which applies `migrations/*.sql` in order and
-records each in a `schema_migrations` table, so `python scripts/migrate.py --status` always
-answers "is this database up to date?".
-
-Add a novel and ingest it:
+Before any service starts, a one-shot `migrate` container applies pending `migrations/*.sql`
+in order and records each in a `schema_migrations` table, so this always answers "is the
+database up to date?":
 
 ```bash
+docker compose run --rm migrate python scripts/migrate.py --status
+```
+
+Add a novel and ingest it. The ingestion worker reads novels from `data/novels` (or
+`NOVEL_DATA_DIR` in `.env`), mounted at `/novels`, so source paths start there:
+
+```bash
+cp -r ~/my-novel data/novels/
+
 curl -X POST localhost:8000/novels -H 'Content-Type: application/json' \
   -d '{"title": "My Novel", "source_type": "local_json"}'
 
 curl -X POST localhost:8000/ingest/from-source -H 'Content-Type: application/json' \
-  -d '{"novel_id": 1, "source_type": "local_json", "source_path": "/path/to/chapters"}'
+  -d '{"novel_id": 1, "source_type": "local_json", "source_path": "/novels/my-novel"}'
 ```
 
-Adapters handle directories of JSON chapter files and EPUB. Ingestion runs through Celery;
-poll `/ingest/status/{task_id}` for progress. Roughly a second per chapter.
+Adapters handle directories of JSON chapter files and EPUB (`"source_type": "epub"` with a
+path like `/novels/book.epub`). Ingestion runs through Celery; poll `/ingest/status/{task_id}`
+for progress. Roughly a second per chapter.
 
 Ask something:
 
@@ -127,7 +144,8 @@ curl -X POST localhost:8000/query -H 'Content-Type: application/json' \
 ```
 services/       gateway, ingestion, retrieval, generation, mcp
 migrations/     PostgreSQL schema
-scripts/        startup and seeding
+scripts/        database and embedding migrations, model server start
+tests/          unit, API, database and end-to-end tests
 frontend/       Next.js app
 training/       dataset generation for fine-tuning
 ```
@@ -140,7 +158,7 @@ progress tracking, MCP server, web UI. Novels are fully isolated: queries, summa
 progress and deletion for one never touch another.
 
 Next: an evaluation harness, request tracing, streaming responses, hybrid search with
-reranking, tests and CI, and fine-tuning on a distilled dataset.
+reranking, and fine-tuning on a distilled dataset.
 
 ## Tests
 
@@ -159,11 +177,18 @@ The suite runs in tiers:
   `REQUIRE_DB=1`, so there an unreachable database fails the run instead of skipping it.
   The test database name must end in `_test`; anything else is refused.
 
-Integration tests hit a live stack and are skipped unless asked for:
+- **End-to-end tests** (`-m integration`) drive the whole stack in Compose through the
+  gateway. A stub model server stands in for vLLM and answers with the chapters it was
+  shown, so the spoiler rule is checked across every service. CI runs them on each push.
+  Locally (they create and delete their own novel):
 
 ```bash
-RUN_INTEGRATION=1 pytest -m integration
+docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait
+RUN_INTEGRATION=1 NOVEL_DATA_DIR=data/novels pytest -m integration
+docker compose up -d    # back to the real model
 ```
+
+`NOVEL_DATA_DIR` must name the directory the stack mounts.
 
 ## Data
 
