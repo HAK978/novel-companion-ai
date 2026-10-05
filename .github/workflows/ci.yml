@@ -62,7 +62,8 @@ jobs:
           python-version: "3.12"
 
       - name: Install ruff
-        run: pip install ruff
+        # pinned: new ruff releases add rules that would fail unchanged code
+        run: pip install ruff==0.16.7
 
       - name: Check
         run: ruff check services/ tests/ scripts/ --output-format=github
