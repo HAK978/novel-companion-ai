@@ -2,7 +2,13 @@
 from celery.result import AsyncResult
 from fastapi import FastAPI
 from pydantic import BaseModel
-from tasks import celery_app, ingest_chapter, ingest_from_source
+from tasks import (
+    celery_app,
+    ingest_chapter,
+    ingest_from_source,
+    schedule_summaries,
+    summary_status,
+)
 
 app = FastAPI(title="Ingestion Service")
 
@@ -73,6 +79,24 @@ def ingest_status(task_id: str):
     elif result.info:
         response["meta"] = result.info
     return response
+
+
+class SummaryRequest(BaseModel):
+    novel_id: int
+    # the reader's chapter; defaults to the furthest any reader has got
+    reader_chapter: int | None = None
+    # summarize up to this chapter instead of the reader's position plus the lookahead
+    up_to: int | None = None
+
+
+@app.post("/summaries")
+def summaries_schedule(request: SummaryRequest):
+    return schedule_summaries(request.novel_id, request.reader_chapter, request.up_to)
+
+
+@app.get("/summaries/{novel_id}")
+def summaries_status(novel_id: int):
+    return summary_status(novel_id)
 
 
 @app.get("/health")

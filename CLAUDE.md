@@ -15,28 +15,32 @@ scoped to the reader's progress.
   `_process_chapter()`): clean HTML → chunk (~400 words, sentence-boundary, `chunking.py`)
   → embed (sentence-transformers all-MiniLM-L6-v2) → store in ChromaDB → chapter record in
   PostgreSQL → optional entity extraction via generation service. Source adapters in
-  `adapters/` (local_json handles nested dirs via rglob, epub).
+  `adapters/` (local_json handles nested dirs via rglob, epub). Chapter summaries: the
+  `summary-worker` (Celery queue `summaries`) writes one per chapter through generation's
+  `/chapter-summary`, up to the furthest reader + `SUMMARY_LOOKAHEAD` (100); scheduled after
+  each ingest and on every progress update (`POST /summaries`, `GET /summaries/{novel_id}`).
 - **Retrieval** (8002) — `services/retrieval/`. ChromaDB similarity search with spoiler
   filter `chapter_number <= current_chapter`, optional `min_chapter` floor, adaptive
   n_results, character lookup from PostgreSQL.
 - **Generation** (8003) — `services/generation/`. One OpenAI-compatible client
   (`llm_client.py`) configured by `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY`; the default
   is the compose `vllm` service (`http://vllm:8000/v1`, host port 8004). No GPU code: an
-  unreachable endpoint is a 502 and `/health` says degraded. Answers send spoiler rules as a system message plus the reader's chapter.
-  Endpoints: /generate, /extract-entities, /models, /health.
+  unreachable endpoint is a 502 and `/health` says degraded. Answers send spoiler rules as a
+  system message plus the reader's chapter. Endpoints: /generate, /extract-entities, /chapter-summary, /models, /health.
 - **MCP** — `services/mcp/server.py`, 8 tools over stdio. Spoiler rule enforced
   server-side: content tools resolve stored progress and clamp requested chapters to it.
 - **Frontend** (3000) — `frontend/`, Next.js + TypeScript + Tailwind.
 - **Compose** — docker-compose.yml runs everything: PostgreSQL 16 (5432), Redis 7 (6379),
   ChromaDB (host 8005 → container 8000), a one-shot `migrate` job, the four services, the
-  Celery worker, the frontend, and vLLM under the `gpu` profile. Ports bind 127.0.0.1 only.
+  Celery ingestion and summary workers, the frontend, and vLLM under the `gpu` profile. Ports bind 127.0.0.1 only.
   docker-compose.ci.yml swaps vLLM for a stub model (`tests/stub_llm/`) for e2e runs.
 
 ## Database
 
 PostgreSQL `novel_companion`. Migrations in `migrations/`. Tables: novels, chapters,
 characters (unique on (novel_id, name)), character_aliases, character_relationships, character_mentions,
-chapter_summaries, reading_progress, search_history. All scoped by novel_id.
+chapter_summaries (one per chapter), range_summaries (cache of /summarize answers), reading_progress,
+search_history. All scoped by novel_id.
 Each novel gets its own ChromaDB collection (`novel_{id}`).
 
 ## Operations
@@ -45,6 +49,11 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   `docker compose up -d --build`. The model: `scripts/start_vllm.sh` (idle GPU, ~2 min to
   healthy); `docker compose stop vllm` releases the GPU. Never leave it running unattended.
 - **Database state:** `docker compose run --rm migrate python scripts/migrate.py --status`.
+- **Chapter summaries:** need the model served; tasks retry every 5 min while it is not.
+  Extend or backfill: `curl -X POST localhost:8001/summaries -H 'content-type: application/json'
+  -d '{"novel_id": N}'` (add `"up_to": M` to go further). ~0.7 s per chapter with 16 model calls
+  in flight (`SUMMARY_PARALLEL`; 8 was ~2.4 s). After changing the name check:
+  `docker compose exec ingestion python -c "from tasks import recheck_summary_flags as r; print(r(N))"`.
 - **Bulk ingest:** POST /ingest/from-source with `extract_entities: false` (default) and a
   `source_path` under `/novels` (host `NOVEL_DATA_DIR`). ~1s/chapter; extraction ~20s/chapter.
 - **End-to-end tests:** run in a separate project so the dev data stays out:
@@ -78,7 +87,7 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
 - ChromaDB clients are cached per process; per-request clients leak server FDs.
 - Chroma volume mounts at `/data`, ulimit nofile 65536, healthcheck uses bash /dev/tcp.
 - Range queries (`/summarize`, `/catch-me-up`) pass `min_chapter`; context chunks are labelled
-  `[Chapter N: title]`. Summary cache is keyed by (novel_id, start, end).
+  `[Chapter N: title]`. Their cache (`range_summaries`) is keyed by (novel_id, start, end).
 - **The prompt is part of the spoiler defense.** A model may know a famous book: at chapter
   5 of the Hound it named the culprit from memory 7/20 times until the rules went into the
   system message (0/40). Keep `system_prompt()` in `llm_client.py`.
@@ -105,6 +114,22 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
 - Chroma is pinned by digest: the tag `1.0.0` names a different image than the one that wrote
   the data.
 - vLLM has `restart: "no"`: on shared GPUs it must not reclaim a GPU after a reboot.
+- **`chapter_summaries` is per chapter; `range_summaries` caches /summarize answers** (it was
+  named chapter_summaries until migration 006). Bump `SUMMARY_PROMPT_VERSION` in
+  `llm_client.py` whenever the summary prompt changes: scheduling then rewrites older ones.
+- Keep `summary-worker` at concurrency 1: each task already has `SUMMARY_PARALLEL` model calls
+  in flight, and two tasks could summarize the same chapters. Chapters waiting for a summary
+  are tracked in Redis (`summaries:pending:<novel>`) so repeated scheduling adds no duplicates.
+- Summaries record names their chapter (title included) never mentions (`unverified_names`):
+  possible additions from the model's memory of the book. On Shadow Slave 1-1391 it flagged 46
+  of 1,390: one real leak (chapter 33's summary used "Underworld", first in the book at chapter
+  250), four invented names ("Cassandra", "Fawkes"), and 41 harmless (book knowledge from
+  earlier chapters, heading words like "Summary"). Checking against the book up to the chapter
+  instead (a per-novel index of where each word first appears) would leave 6 flags with all 5
+  real ones, and would also answer "is this name in what I've read?".
+- **Shadow Slave's index predates the paragraph-spacing fix in `clean_html`**: its chunks glue
+  paragraphs ("himself.After", ~6 per chunk) and each chapter's title to its first word
+  ("Turf WarCaster"). The Hound's index is clean. Re-ingest Shadow Slave to fix (CPU only).
 - Never pipe `scripts/start_vllm.sh` into `head` or similar: the closed pipe kills the script
   before `docker compose up` runs, and the model silently never starts.
 - **Evaluation scores in code, not with an LLM judge.** Mistral Nemo graded "not revealed" as

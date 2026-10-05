@@ -166,3 +166,23 @@ def test_empty_chapter_is_skipped(ingestion_tasks, pipeline):
     result = ingestion_tasks._process_chapter({"novel_id": 1, "number": 8, "content": ""})
 
     assert result["status"] == "skipped"
+
+
+# --- checking chapter summaries ---
+
+@pytest.mark.parametrize("summary,title,text,flagged", [
+    # a name the chapter never uses is flagged: it may come from the model's memory
+    ("Sunny crosses the bridge while Mordret watches.", "", "sunny crossed the bridge", ["Mordret"]),
+    # the title counts as part of the chapter
+    ('In Chapter 16, "Rebirth," Sunny changes.', "Chapter 16 Rebirth", "sunny changed", []),
+    # words opening a sentence are capitalized anyway
+    ("Sunny falls. Despite this, he rises.", "", "sunny fell and rose", []),
+    # plurals and possessives match their stem
+    ("The Baskervilles trust Barrymore's wife.", "", "a baskerville and barrymore", []),
+    ("Sunny counts his Memories.", "", "sunny earned a memory", []),
+    # markdown headings and list numbers still open a sentence
+    ("**Summary:** Sunny rests.\n1. Despite everything, he wins.", "", "sunny rested and won", []),
+])
+def test_summary_names_are_checked_against_the_chapter(ingestion_tasks, summary, title, text,
+                                                       flagged):
+    assert ingestion_tasks._unverified_names(summary, title, text) == flagged

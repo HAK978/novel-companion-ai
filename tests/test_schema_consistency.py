@@ -53,14 +53,23 @@ def unique_constraints() -> dict[str, set[tuple[str, ...]]]:
 
         # Applied in document order: a migration commonly drops a constraint
         # and re-adds it under the same name, so ordering decides the outcome.
+        # (CREATE TABLE is read first, so a file must not create a table under a
+        # name it also renames away; keep renames in a migration of their own.)
         for alter in re.finditer(
             r"ALTER TABLE\s+(\w+)\s+(?:"
             r"ADD CONSTRAINT\s+(\w+)\s+UNIQUE\s*\(([^)]+)\)"
-            r"|DROP CONSTRAINT(?:\s+IF EXISTS)?\s+(\w+))",
+            r"|DROP CONSTRAINT(?:\s+IF EXISTS)?\s+(\w+)"
+            r"|RENAME TO\s+(\w+))",
             sql,
             re.I,
         ):
             table = alter.group(1).lower()
+
+            if alter.group(5):  # the constraints move with the table
+                renamed = alter.group(5).lower()
+                constraints[renamed] = constraints.pop(table, set())
+                named = {n: (renamed if t == table else t, c) for n, (t, c) in named.items()}
+                continue
 
             if alter.group(2):
                 name, columns = alter.group(2).lower(), _columns(alter.group(3))

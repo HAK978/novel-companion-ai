@@ -15,7 +15,7 @@ pytestmark = pytest.mark.db
 MIGRATIONS = sorted((Path(__file__).resolve().parent.parent / "migrations").glob("*.sql"))
 NOVEL_SCOPED_TABLES = (
     "chapters", "characters", "character_mentions", "character_relationships",
-    "chapter_summaries", "reading_progress", "search_history",
+    "chapter_summaries", "range_summaries", "reading_progress", "search_history",
 )
 
 
@@ -141,3 +141,31 @@ def test_baseline_records_history_without_changing_the_schema(scratch):
 def test_unused_conversations_table_is_gone(db_engine):
     with db_engine.connect() as conn:
         assert conn.execute(text("SELECT to_regclass('conversations')")).scalar() is None
+
+
+def test_006_keeps_cached_range_summaries_and_frees_the_name(scratch):
+    # 006 renames the range cache so that 007 can create chapter_summaries for single
+    # chapters; the rename must carry the table's constraints, index and sequence names
+    url, engine = scratch
+    for migration in MIGRATIONS[:5]:
+        run_sql(engine, migration.read_text())
+    run_sql(engine, """
+        INSERT INTO novels (id, title) VALUES (1, 'Kept');
+        INSERT INTO chapter_summaries (novel_id, start_chapter, end_chapter, summary)
+            VALUES (1, 1, 10, 'a cached recap');
+    """)
+    migrate = load_migrate()
+    migrate.migrate(url, baseline=MIGRATIONS[4].name, out=lambda _: None)
+
+    applied = migrate.migrate(url, out=lambda _: None)
+
+    with engine.connect() as conn:
+        recap = conn.execute(text("SELECT summary FROM range_summaries")).scalar()
+        leftover = conn.execute(text(
+            "SELECT conname FROM pg_constraint WHERE conrelid = 'range_summaries'::regclass "
+            "AND conname NOT LIKE 'range_summaries%'")).scalars().all()
+        per_chapter = conn.execute(text("SELECT count(*) FROM chapter_summaries")).scalar()
+    assert applied == [m.name for m in MIGRATIONS[5:]]
+    assert recap == "a cached recap"
+    assert leftover == []
+    assert per_chapter == 0

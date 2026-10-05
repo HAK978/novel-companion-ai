@@ -256,7 +256,7 @@ def test_summary_cache_is_keyed_by_novel(client, wire):
 
     client.post("/summarize", json=SUMMARY_REQUEST)
 
-    insert = next(s for s in engine.statements if "INSERT INTO chapter_summaries" in s["sql"])
+    insert = next(s for s in engine.statements if "INSERT INTO range_summaries" in s["sql"])
     assert "ON CONFLICT (novel_id, start_chapter, end_chapter)" in insert["sql"]
     assert insert["params"]["nid"] == 3
 
@@ -266,7 +266,7 @@ def test_summary_cache_lookup_is_scoped_to_novel_and_clamped_range(client, wire)
 
     client.post("/summarize", json=SUMMARY_REQUEST)
 
-    select = next(s for s in engine.statements if "SELECT summary FROM chapter_summaries" in s["sql"])
+    select = next(s for s in engine.statements if "SELECT summary FROM range_summaries" in s["sql"])
     assert select["params"] == {"nid": 3, "s": 100, "e": 120}
 
 
@@ -288,7 +288,7 @@ def test_failed_generation_is_not_cached_as_a_summary(client, wire):
     response = client.post("/summarize", json=SUMMARY_REQUEST)
 
     assert response.status_code == 502
-    assert not any("INSERT INTO chapter_summaries" in s["sql"] for s in engine.statements)
+    assert not any("INSERT INTO range_summaries" in s["sql"] for s in engine.statements)
 
 
 def test_query_surfaces_generation_failure(client, wire):
@@ -404,3 +404,30 @@ def test_health_checks_services_concurrently(client, gateway_main, monkeypatch):
 
     assert time.perf_counter() - started < 1.0  # three 0.5 s checks, run together
     assert all(body["services"][s]["status"] == "ok" for s in ("ingestion", "retrieval", "generation"))
+
+
+def test_progress_keeps_summaries_ahead_of_the_reader(client, gateway_main, monkeypatch):
+    monkeypatch.setattr(gateway_main, "engine", FakeEngine())
+    sent = []
+    monkeypatch.setattr(gateway_main.httpx, "post",
+                        lambda url, json=None, timeout=None: sent.append((url, json)))
+
+    client.post("/progress", json={"novel_id": 3, "current_chapter": 1291})
+
+    assert sent == [(f"{gateway_main.INGESTION_SERVICE_URL}/summaries",
+                     {"novel_id": 3, "reader_chapter": 1291})]
+
+
+def test_progress_is_saved_even_when_ingestion_is_down(client, gateway_main, monkeypatch):
+    engine = FakeEngine()
+    monkeypatch.setattr(gateway_main, "engine", engine)
+
+    def refuse(*args, **kwargs):
+        raise gateway_main.httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(gateway_main.httpx, "post", refuse)
+
+    resp = client.post("/progress", json={"novel_id": 3, "current_chapter": 1291})
+
+    assert resp.status_code == 200
+    assert any("INSERT INTO reading_progress" in s["sql"] for s in engine.statements)

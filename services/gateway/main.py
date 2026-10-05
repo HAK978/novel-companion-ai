@@ -205,8 +205,8 @@ def _delete_novel_rows(novel_id: int) -> None:
                 OR character_a_id IN (SELECT id FROM characters WHERE novel_id = :id)
                 OR character_b_id IN (SELECT id FROM characters WHERE novel_id = :id)
         """), {"id": novel_id})
-        for table in ["search_history", "reading_progress",
-                       "chapter_summaries", "characters", "chapters"]:
+        for table in ["search_history", "reading_progress", "range_summaries",
+                      "chapter_summaries", "characters", "chapters"]:
             conn.execute(text(f"DELETE FROM {table} WHERE novel_id = :id"), {"id": novel_id})
         conn.execute(text("DELETE FROM novels WHERE id = :id"), {"id": novel_id})
         conn.commit()
@@ -360,7 +360,7 @@ async def summarize(request: SummarizeRequest):
         with engine.connect() as conn:
             return conn.execute(
                 text("""
-                    SELECT summary FROM chapter_summaries
+                    SELECT summary FROM range_summaries
                     WHERE novel_id = :nid AND start_chapter = :s AND end_chapter = :e
                 """),
                 {"nid": request.novel_id, "s": request.start_chapter, "e": end_ch},
@@ -423,7 +423,7 @@ async def summarize(request: SummarizeRequest):
         with engine.connect() as conn:
             conn.execute(
                 text("""
-                    INSERT INTO chapter_summaries (novel_id, start_chapter, end_chapter, summary)
+                    INSERT INTO range_summaries (novel_id, start_chapter, end_chapter, summary)
                     VALUES (:nid, :s, :e, :sum)
                     ON CONFLICT (novel_id, start_chapter, end_chapter) DO UPDATE SET summary = :sum
                 """),
@@ -508,11 +508,28 @@ def update_progress(request: ProgressRequest):
             },
         )
         conn.commit()
+    # Chapter summaries are written only a little ahead of readers, so keep them ahead of
+    # this one. Best effort: progress is saved whether or not ingestion is reachable.
+    try:
+        httpx.post(f"{INGESTION_SERVICE_URL}/summaries", timeout=3, json={
+            "novel_id": request.novel_id, "reader_chapter": request.current_chapter})
+    except httpx.HTTPError:
+        pass
     return {
         "novel_id": request.novel_id,
         "user_id": request.user_id,
         "current_chapter": request.current_chapter,
     }
+
+
+@app.get("/novels/{novel_id}/summaries")
+async def novel_summaries(novel_id: int):
+    """How far chapter summaries have got for a novel."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{INGESTION_SERVICE_URL}/summaries/{novel_id}")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Ingestion service failed")
+    return resp.json()
 
 
 @app.get("/progress/{novel_id}/{user_id}")

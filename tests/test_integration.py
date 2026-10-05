@@ -139,6 +139,19 @@ def test_progress_round_trips(novel):
     assert body["current_chapter"] == 7
 
 
+def test_every_chapter_gets_a_summary(novel):
+    # written in the background after ingestion, by the summary worker through the model
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        status = httpx.get(f"{GATEWAY}/novels/{novel}/summaries", timeout=10).json()
+        if status["summarized"] == CHAPTERS:
+            break
+        time.sleep(2)
+
+    assert status["summarized"] == CHAPTERS, status
+    assert status["highest_chapter"] == CHAPTERS
+
+
 def test_deleting_a_novel_removes_it():
     novel_id = httpx.post(f"{GATEWAY}/novels", json={"title": "Doomed"}, timeout=30).json()["id"]
 

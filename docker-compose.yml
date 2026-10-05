@@ -139,6 +139,23 @@ services:
       start_period: 30s
       retries: 3
 
+  summary-worker:
+    <<: *ingestion
+    # Writes chapter summaries in the background, on its own queue so they never hold up
+    # ingestion; while the model is not being served, its tasks wait and retry. One task at
+    # a time: each keeps several model calls in flight, and a second would duplicate them.
+    command: ["celery", "-A", "tasks.celery_app", "worker", "-Q", "summaries",
+              "-n", "summaries@%h", "--loglevel=info", "--concurrency=1"]
+    # a batch takes ~35 s; let it finish on shutdown rather than being killed after 10 s
+    # (a killed task's message waits an hour before it is delivered again)
+    stop_grace_period: 2m
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A tasks.celery_app inspect ping -d summaries@$$HOSTNAME --timeout 5 | grep -q pong"]
+      interval: 30s
+      timeout: 15s
+      start_period: 30s
+      retries: 3
+
   retrieval:
     build:
       context: .

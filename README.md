@@ -52,7 +52,9 @@ no-outside-knowledge rule now go to the model as a system message, which brought
 ```
 
 - **Gateway** — entry point; orchestrates retrieval → generation, manages novels and progress
-- **Ingestion** — Celery workers: clean HTML → chunk → embed → store; pluggable source adapters
+- **Ingestion** — Celery workers: clean HTML → chunk → embed → store; pluggable source adapters.
+  A background worker also writes a short summary of each chapter, for questions that span
+  many chapters.
 - **Retrieval** — vector search with chapter filtering and range scoping
 - **Generation** — prompts and calls to the language model: any OpenAI-compatible endpoint,
   vLLM by default
@@ -106,6 +108,10 @@ The first start builds the images. The web UI is then at http://localhost:3000, 
 Services come back on their own after a reboot, but the model server does not: on a shared
 machine, `scripts/start_vllm.sh` starts it on an idle GPU and `docker compose stop vllm`
 releases it.
+
+Chapter summaries are written in the background while the model is being served, up to 100
+chapters past the furthest reader, and extended as reading progress moves on;
+`curl localhost:8000/novels/1/summaries` shows how far they have got.
 
 Before any service starts, a one-shot `migrate` container applies pending `migrations/*.sql`
 in order and records each in a `schema_migrations` table, so this always answers "is the

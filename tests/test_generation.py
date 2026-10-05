@@ -221,3 +221,53 @@ def test_health_probe_of_the_model_is_short(monkeypatch):
 
     assert client_module.LLMClient().status()["status"] == "degraded"
     assert seen["timeout"] <= 2
+
+
+# --- chapter summaries ---
+
+CHAPTER_TEXT = ("Sunny crossed the old bridge with Nephis. The river below was dark, and "
+                "neither of them looked down.")
+
+
+def test_a_chapter_summary_is_written_from_the_chapter_alone(service, endpoint):
+    sent, replies = endpoint
+    replies["post"] = completion("Sunny and Nephis cross an old bridge.")
+
+    body = service.post("/chapter-summary",
+                        json={"chapter_number": 12, "chapter_text": CHAPTER_TEXT}).json()
+
+    request = sent[0]["json"]
+    assert body["summary"] == "Sunny and Nephis cross an old bridge."
+    assert request["temperature"] == 0
+    assert request["messages"][0]["role"] == "system"
+    assert "never use that knowledge" in request["messages"][0]["content"]
+    assert "chapter 12" in request["messages"][1]["content"]
+    assert CHAPTER_TEXT in request["messages"][1]["content"]
+
+
+def test_a_chapter_too_long_for_one_call_is_summarized_in_parts(service, endpoint):
+    sent, replies = endpoint
+    replies["post"] = completion("Part summary.")
+
+    body = service.post("/chapter-summary",
+                        json={"chapter_number": 3, "chapter_text": "word " * 20000}).json()
+
+    assert len(sent) == 3  # 8,000 words per call
+    assert "(part 1 of 3)" in sent[0]["json"]["messages"][1]["content"]
+    assert body["summary"].count("Part summary.") == 3
+
+
+def test_summaries_record_the_prompt_version(service):
+    body = service.get("/chapter-summary").json()
+
+    assert body["model"] == MODEL
+    assert body["prompt_version"] >= 1
+
+
+def test_a_summary_fails_cleanly_when_the_model_is_unreachable(service, endpoint):
+    _, replies = endpoint
+    replies["post"] = httpx.ConnectError("connection refused")
+
+    resp = service.post("/chapter-summary", json={"chapter_number": 1, "chapter_text": CHAPTER_TEXT})
+
+    assert resp.status_code == 502

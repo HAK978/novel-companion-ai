@@ -2,7 +2,7 @@ import json
 
 from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from llm_client import LLMClient, LLMError
+from llm_client import SUMMARY_PROMPT_VERSION, LLMClient, LLMError, summarize_chapter
 from pydantic import BaseModel
 
 app = FastAPI(title="Generation Service")
@@ -80,6 +80,27 @@ JSON array:"""
         characters = []
 
     return {"characters": characters, "raw": raw}
+
+
+class ChapterSummaryRequest(BaseModel):
+    chapter_number: int
+    chapter_text: str
+
+
+@app.get("/chapter-summary")
+def chapter_summary_version():
+    """What a summary written now would record, so callers can tell which stored ones are stale."""
+    return {"model": llm.model, "prompt_version": SUMMARY_PROMPT_VERSION}
+
+
+@app.post("/chapter-summary")
+async def chapter_summary(request: ChapterSummaryRequest):
+    try:
+        summary = await run_in_threadpool(
+            summarize_chapter, llm, request.chapter_number, request.chapter_text)
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"summary": summary, "model": llm.model, "prompt_version": SUMMARY_PROMPT_VERSION}
 
 
 @app.get("/models")

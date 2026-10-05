@@ -103,6 +103,40 @@ def _spoiler_rules(current_chapter: int | None) -> str:
     return "\n".join(rules)
 
 
+# --- Chapter summaries ---------------------------------------------------------------
+# Written once per chapter and stored, so that broad questions can be answered without
+# reading every chapter again. Bump the version whenever the prompt changes: stored summaries
+# record it, and older ones can then be found and rewritten.
+SUMMARY_PROMPT_VERSION = 1
+SUMMARY_WORDS_PER_CALL = 8000  # ~11k tokens: leaves room for the reply in a 16k context
+SUMMARY_SYSTEM = (
+    "You summarize one chapter of a book at a time, for readers who have read up to that "
+    "chapter. You may recognize this book: never use that knowledge, and never mention "
+    "anything that happens later."
+)
+
+
+def chapter_summary_prompt(chapter_number: int, text: str, part: str = "") -> str:
+    return (
+        f"Summarize chapter {chapter_number}{part} of a novel in at most 120 words: the key "
+        "events, who was involved, and anything that changed or was revealed. Use only this "
+        f"text, and only names that appear in it.\n\n{text}"
+    )
+
+
+def summarize_chapter(llm: "LLMClient", chapter_number: int, text: str) -> str:
+    """One summary per chapter. A chapter too long for one call is summarized in parts."""
+    words = text.split()
+    parts = [" ".join(words[i:i + SUMMARY_WORDS_PER_CALL])
+             for i in range(0, len(words), SUMMARY_WORDS_PER_CALL)] or [""]
+    summaries = []
+    for i, part in enumerate(parts, 1):
+        label = f" (part {i} of {len(parts)})" if len(parts) > 1 else ""
+        summaries.append(llm.complete(chapter_summary_prompt(chapter_number, part, label),
+                                      system=SUMMARY_SYSTEM, max_tokens=300, temperature=0))
+    return "\n\n".join(summaries)
+
+
 class LLMClient:
     def __init__(
         self,
