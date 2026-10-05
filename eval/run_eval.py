@@ -16,14 +16,18 @@ Scoring is done in code wherever it can be, because an LLM judge proved unreliab
   unanswerable   whether the answer says it cannot find the person (strict: an answer that
                  neither says so nor invents anything still fails)
 
-Measured against hand grades (eval/labels/hound.json): fact scoring agreed on 59 of 60
-answers; on 188 fresh answers the name check raised no false alarm, while the reveal patterns
-were right on only 2 of 8 flags (they were written against the graded answers and overfit),
-which is why they only flag answers for review. Mistral Nemo as a judge agreed on leaks 30/47
-and on invented people 4/10, so --judge (an LLM cross-check) is off by default.
+Measured against hand grades (eval/labels/hound.json): key terms agreed on 59 of the 60
+answers they were written against, but on fresh answers 5 of 64 passes were wrong or only
+partly right, because a wrong answer can still contain the right name ("Selden is actually
+Sherlock Holmes in disguise"), so spot-check what passes. The name check raised no false
+alarm in 188 fresh answers; the reveal patterns were right on only 2 of 8 flags (they overfit
+the answers they were written against), so they only flag answers for review. Mistral Nemo as
+a judge agreed on leaks 30/47 and on invented people 4/10, so --judge (an LLM cross-check) is
+off by default.
 
---rejudge RESULTS re-scores stored answers without calling the app; --labels reports
-agreement with hand grades. --no-retrieval asks the model directly, as a chatbot would be
+--rejudge RESULTS re-scores stored answers without calling the app (--in-place rewrites that
+file, keeping stored verdicts in step with the scoring); --labels reports agreement with hand
+grades. --no-retrieval asks the model directly, as a chatbot would be
 asked. The app answers at temperature 0.3, so runs differ slightly.
 Results go to eval/results/<set>[-no-retrieval][-rejudge]-<timestamp>.json.
 """
@@ -269,6 +273,7 @@ def main():
     ap.add_argument("--title", help="the book's title, for --no-retrieval")
     ap.add_argument("--rejudge", help="re-score the answers stored in this results file")
     ap.add_argument("--labels", help="hand grades to measure scoring against (with --rejudge)")
+    ap.add_argument("--in-place", action="store_true", help="with --rejudge: rewrite that file")
     args = ap.parse_args()
     if args.no_retrieval and not args.title:
         ap.error("--no-retrieval needs --title")
@@ -303,7 +308,7 @@ def main():
             seconds = round(time.perf_counter() - started, 2)
         row = score(args, item, reply["answer"], reply["sources"], reveals, names)
         row["seconds"] = seconds
-        if not args.rejudge and reply["sources"]:
+        if reply["sources"] and "text" in reply["sources"][0]:
             row["sources"] = reply["sources"]
         rows.append(row)
         verdict = row.get("correct") or row["leak"]
@@ -318,6 +323,8 @@ def main():
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     suffix = ("-no-retrieval" if mode == "no-retrieval" else "") + ("-rejudge" if args.rejudge else "")
     out = ROOT / "eval" / "results" / f"{set_path.stem}{suffix}-{stamp}.json"
+    if args.rejudge and args.in_place:
+        out, result["answers_from"] = Path(args.rejudge), None
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=2))
     print(json.dumps({"summary": summary, "agreement": result.get("agreement")}, indent=2))

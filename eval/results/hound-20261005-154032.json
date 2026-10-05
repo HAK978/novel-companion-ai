@@ -1,32 +1,35 @@
 {
   "set": "eval/sets/hound.jsonl",
-  "judge": "mistralai/Mistral-Nemo-Instruct-2407",
   "mode": "app",
+  "judge": null,
+  "answers_from": null,
   "summary": {
     "overall": {
-      "items": 49,
-      "sources_spoiler_safe": 1.0,
-      "median_seconds": 3.84
+      "items": 47,
+      "passages_safe": 47,
+      "answers_leaking": 0,
+      "answers_to_review": 2,
+      "median_seconds": 3.83
     },
     "fact": {
       "items": 25,
-      "correct": 0.28,
-      "declined": 0.52,
-      "context_recall": 0.68
+      "correct": 12,
+      "declined": 11,
+      "wrong": 2
     },
     "recent": {
       "items": 5,
-      "correct": 0.6,
-      "declined": 0.4,
-      "context_recall": 0.4
+      "correct": 3,
+      "declined": 2,
+      "wrong": 0
     },
     "spoiler": {
-      "items": 9,
-      "safe": 0.6666666666666666
+      "items": 7,
+      "leaked": 0
     },
     "unanswerable": {
       "items": 10,
-      "abstained": 0.5
+      "flags_unknown": 1
     }
   },
   "results": [
@@ -41,11 +44,12 @@
         6,
         7
       ],
-      "seconds": 3.84,
-      "sources_spoiler_safe": true,
-      "verdict": "INVENTED",
-      "passed": false,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "flags_unknown": false,
+      "seconds": 3.84
     },
     {
       "id": "hound-003",
@@ -58,12 +62,12 @@
         6,
         11
       ],
-      "seconds": 3.81,
-      "sources_spoiler_safe": true,
-      "verdict": "CORRECT",
-      "passed": true,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 3.81
     },
     {
       "id": "hound-004",
@@ -75,12 +79,12 @@
         2,
         6
       ],
-      "seconds": 6.02,
-      "sources_spoiler_safe": true,
-      "verdict": "CORRECT",
-      "passed": true,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 6.02
     },
     {
       "id": "hound-005",
@@ -92,12 +96,12 @@
         1,
         2
       ],
-      "seconds": 1.66,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 1.66
     },
     {
       "id": "hound-006",
@@ -108,12 +112,12 @@
       "source_chapters": [
         2
       ],
-      "seconds": 3.73,
-      "sources_spoiler_safe": true,
-      "verdict": "CORRECT",
-      "passed": true,
-      "declined": false,
-      "context_recall": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 3.73
     },
     {
       "id": "hound-007",
@@ -126,12 +130,12 @@
         6,
         7
       ],
-      "seconds": 5.35,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": false,
-      "context_recall": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 5.35
     },
     {
       "id": "hound-008",
@@ -144,12 +148,12 @@
         6,
         7
       ],
-      "seconds": 1.73,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 1.73
     },
     {
       "id": "hound-009",
@@ -161,12 +165,12 @@
         2,
         6
       ],
-      "seconds": 3.64,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 3.64
     },
     {
       "id": "hound-010",
@@ -180,12 +184,12 @@
         8,
         9
       ],
-      "seconds": 3.75,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 3.75
     },
     {
       "id": "hound-012",
@@ -200,11 +204,12 @@
         9,
         10
       ],
-      "seconds": 8.21,
-      "sources_spoiler_safe": true,
-      "verdict": "ABSTAINED",
-      "passed": true,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "flags_unknown": true,
+      "seconds": 8.21
     },
     {
       "id": "hound-013",
@@ -219,11 +224,12 @@
         7,
         8
       ],
-      "seconds": 4.56,
-      "sources_spoiler_safe": true,
-      "verdict": "INVENTED",
-      "passed": false,
-      "declined": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "flags_unknown": false,
+      "seconds": 4.56
     },
     {
       "id": "hound-014",
@@ -236,12 +242,12 @@
         5,
         6
       ],
-      "seconds": 1.4,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 1.4
     },
     {
       "id": "hound-015",
@@ -254,12 +260,12 @@
         6,
         7
       ],
-      "seconds": 8.49,
-      "sources_spoiler_safe": true,
-      "verdict": "PARTIAL",
-      "passed": false,
-      "declined": true,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 8.49
     },
     {
       "id": "hound-016",
@@ -272,12 +278,12 @@
         5,
         6
       ],
-      "seconds": 3.16,
-      "sources_spoiler_safe": true,
-      "verdict": "CORRECT",
-      "passed": true,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 3.16
     },
     {
       "id": "hound-017",
@@ -290,11 +296,12 @@
         3,
         4
       ],
-      "seconds": 3.18,
-      "sources_spoiler_safe": true,
-      "verdict": "INVENTED",
-      "passed": false,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "flags_unknown": false,
+      "seconds": 3.18
     },
     {
       "id": "hound-018",
@@ -307,11 +314,12 @@
         4,
         7
       ],
-      "seconds": 4.84,
-      "sources_spoiler_safe": true,
-      "verdict": "ABSTAINED",
-      "passed": true,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "flags_unknown": false,
+      "seconds": 4.84
     },
     {
       "id": "hound-019",
@@ -325,12 +333,12 @@
         4,
         7
       ],
-      "seconds": 1.24,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 1.24
     },
     {
       "id": "hound-021",
@@ -344,12 +352,12 @@
         6,
         14
       ],
-      "seconds": 7.14,
-      "sources_spoiler_safe": true,
-      "verdict": "PARTIAL",
-      "passed": false,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 7.14
     },
     {
       "id": "hound-022",
@@ -362,12 +370,12 @@
         5,
         6
       ],
-      "seconds": 12.6,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 12.6
     },
     {
       "id": "hound-024",
@@ -380,12 +388,12 @@
         6,
         7
       ],
-      "seconds": 4.68,
-      "sources_spoiler_safe": true,
-      "verdict": "CORRECT",
-      "passed": true,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 4.68
     },
     {
       "id": "hound-025",
@@ -398,12 +406,12 @@
         7,
         8
       ],
-      "seconds": 9.83,
-      "sources_spoiler_safe": true,
-      "verdict": "PARTIAL",
-      "passed": false,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "WRONG",
+      "seconds": 9.83
     },
     {
       "id": "hound-026",
@@ -416,12 +424,12 @@
         6,
         7
       ],
-      "seconds": 2.65,
-      "sources_spoiler_safe": true,
-      "verdict": "CORRECT",
-      "passed": true,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 2.65
     },
     {
       "id": "hound-027",
@@ -432,12 +440,12 @@
       "source_chapters": [
         7
       ],
-      "seconds": 3.6,
-      "sources_spoiler_safe": true,
-      "verdict": "CORRECT",
-      "passed": true,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 3.6
     },
     {
       "id": "hound-028",
@@ -448,11 +456,11 @@
       "source_chapters": [
         2
       ],
-      "seconds": 1.55,
-      "sources_spoiler_safe": true,
-      "verdict": "SAFE",
-      "passed": true,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "seconds": 1.55
     },
     {
       "id": "hound-031",
@@ -466,12 +474,12 @@
         7,
         10
       ],
-      "seconds": 4.96,
-      "sources_spoiler_safe": true,
-      "verdict": "CORRECT",
-      "passed": true,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 4.96
     },
     {
       "id": "hound-032",
@@ -485,12 +493,12 @@
         11,
         13
       ],
-      "seconds": 5.07,
-      "sources_spoiler_safe": true,
-      "verdict": "PARTIAL",
-      "passed": false,
-      "declined": true,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 5.07
     },
     {
       "id": "hound-033",
@@ -504,12 +512,12 @@
         11,
         13
       ],
-      "seconds": 6.03,
-      "sources_spoiler_safe": true,
-      "verdict": "PARTIAL",
-      "passed": false,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "WRONG",
+      "seconds": 6.03
     },
     {
       "id": "hound-034",
@@ -524,29 +532,12 @@
         9,
         12
       ],
-      "seconds": 1.91,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": true
-    },
-    {
-      "id": "hound-037",
-      "category": "spoiler",
-      "current_chapter": 9,
-      "question": "What was the true relationship between Stapleton and the woman who passed herself off as his sister?",
-      "answer": "Based on the passages provided, the true relationship between Stapleton and the woman who passed herself off as his sister, Beryl, is that of a husband and wife, not siblings. This is evident from the following details:\n\n1. **Chapter 7: The Stapletons of Merripit House**: When Dr. Watson first meets Beryl, she is walking alone on the moor and seems surprised to see him. She introduces herself as Miss Stapleton, but later, when her brother joins them, she refers to him as \"Jack,\" suggesting a familiarity that goes beyond that of siblings.\n\n2. **Chapter 9: The Light upon the Moor [Second Report of Dr. Watson]**: In this passage, Sir Henry is seen arguing with Stapleton and Beryl. Stapleton is angry with Sir Henry for pursuing Beryl, and he gestures angrily at both Sir Henry and Beryl, suggesting that his displeasure includes her. This scene implies a romantic relationship between Sir Henry and Beryl, which Stapleton disapproves of. The fact that Stapleton is angry with both Sir Henry and Beryl suggests that he is not merely protective of his sister but has a more personal stake in the matter.\n\nThese passages indicate that the relationship between Stapleton and Beryl is that of a married couple, not siblings. However, the story has not yet revealed why they chose to pass themselves off as brother and sister.",
-      "source_chapters": [
-        7,
-        8,
-        9
-      ],
-      "seconds": 10.98,
-      "sources_spoiler_safe": true,
-      "verdict": "SAFE",
-      "passed": true,
-      "declined": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 1.91
     },
     {
       "id": "hound-040",
@@ -561,11 +552,12 @@
         14,
         15
       ],
-      "seconds": 6.81,
-      "sources_spoiler_safe": true,
-      "verdict": "INVENTED",
-      "passed": false,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "flags_unknown": false,
+      "seconds": 6.81
     },
     {
       "id": "hound-041",
@@ -578,11 +570,12 @@
         9,
         11
       ],
-      "seconds": 3.83,
-      "sources_spoiler_safe": true,
-      "verdict": "INVENTED",
-      "passed": false,
-      "declined": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "flags_unknown": false,
+      "seconds": 3.83
     },
     {
       "id": "hound-042",
@@ -595,12 +588,12 @@
         9,
         12
       ],
-      "seconds": 4.48,
-      "sources_spoiler_safe": true,
-      "verdict": "CORRECT",
-      "passed": true,
-      "declined": false,
-      "context_recall": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 4.48
     },
     {
       "id": "hound-043",
@@ -614,12 +607,12 @@
         12,
         14
       ],
-      "seconds": 6.15,
-      "sources_spoiler_safe": true,
-      "verdict": "CORRECT",
-      "passed": true,
-      "declined": false,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 6.15
     },
     {
       "id": "hound-044",
@@ -633,12 +626,12 @@
         12,
         14
       ],
-      "seconds": 5.23,
-      "sources_spoiler_safe": true,
-      "verdict": "PARTIAL",
-      "passed": false,
-      "declined": true,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "CORRECT",
+      "seconds": 5.23
     },
     {
       "id": "hound-045",
@@ -652,31 +645,12 @@
         12,
         13
       ],
-      "seconds": 5.79,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": false
-    },
-    {
-      "id": "hound-046",
-      "category": "spoiler",
-      "current_chapter": 12,
-      "question": "Who was the person behind the hound that was terrorizing Sir Henry Baskerville?",
-      "answer": "Based on the information provided in the passages, the person behind the hound that was terrorizing Sir Henry Baskerville has not been explicitly revealed yet. However, there are a few suspects and hints:\n\n1. **Rodger Baskerville**: Mentioned in Passage 5, he is the last known relative of the Baskerville family who met an untimely death in Central America. He was described as the \"black sheep\" of the family and the \"very image\" of the family's masterful strain. It's possible that he could be involved, but this is purely speculative as there's no concrete evidence yet.\n\n2. **The Stapletons**: In Passage 2, we learn about the Stapletons, who live at Merripit House. Miss Stapleton warns Sir Henry about the danger on the moor and the curse of the Baskervilles. Her brother, who is a naturalist, is also a suspect. They are known to be familiar with the moor and its legends, which could potentially tie them to the hound.\n\n3. **The Barrymores**: Mentioned in Passage 3, the Barrymores are the couple who serve as caretakers at Baskerville Hall. They are also suspects, but Mr. Sherlock Holmes advises against dismissing them as they could be innocent.\n\n4. **Unknown Stranger**: In Passage 1, Dr. Watson mentions a stranger he saw on the moor. This stranger could potentially be involved in the hound's appearances, but their identity and motives are still unknown.\n\nSo far, the story has not revealed the exact person behind the hound, but these suspects have been introduced and could potentially be involved.",
-      "source_chapters": [
-        3,
-        6,
-        7,
-        9,
-        10
-      ],
-      "seconds": 13.02,
-      "sources_spoiler_safe": true,
-      "verdict": "SAFE",
-      "passed": true,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 5.79
     },
     {
       "id": "hound-047",
@@ -690,11 +664,12 @@
         12,
         15
       ],
-      "seconds": 3.25,
-      "sources_spoiler_safe": true,
-      "verdict": "ABSTAINED",
-      "passed": true,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "flags_unknown": false,
+      "seconds": 3.25
     },
     {
       "id": "hound-048",
@@ -708,11 +683,12 @@
         9,
         14
       ],
-      "seconds": 4.23,
-      "sources_spoiler_safe": true,
-      "verdict": "ABSTAINED",
-      "passed": true,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "flags_unknown": false,
+      "seconds": 4.23
     },
     {
       "id": "hound-049",
@@ -726,12 +702,12 @@
         12,
         13
       ],
-      "seconds": 1.37,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 1.37
     },
     {
       "id": "hound-050",
@@ -745,12 +721,12 @@
         12,
         13
       ],
-      "seconds": 1.76,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 1.76
     },
     {
       "id": "hound-051",
@@ -764,12 +740,12 @@
         12,
         15
       ],
-      "seconds": 1.43,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 1.43
     },
     {
       "id": "hound-052",
@@ -784,18 +760,18 @@
         14,
         15
       ],
-      "seconds": 1.44,
-      "sources_spoiler_safe": true,
-      "verdict": "WRONG",
-      "passed": false,
-      "declined": true,
-      "context_recall": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
+      "seconds": 1.44
     },
     {
       "id": "hound-053",
       "category": "spoiler",
       "current_chapter": 12,
-      "question": "Who was the real identity of the man who called himself Stapleton?",
+      "question": "Is Stapleton related to the Baskerville family?",
       "answer": "The story has not revealed the real identity of the man who called himself Stapleton yet.",
       "source_chapters": [
         7,
@@ -803,11 +779,11 @@
         9,
         12
       ],
-      "seconds": 1.36,
-      "sources_spoiler_safe": true,
-      "verdict": "SAFE",
-      "passed": true,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "seconds": 1.36
     },
     {
       "id": "hound-054",
@@ -822,11 +798,12 @@
         11,
         14
       ],
-      "seconds": 1.34,
-      "sources_spoiler_safe": true,
-      "verdict": "ABSTAINED",
-      "passed": true,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "flags_unknown": false,
+      "seconds": 1.34
     },
     {
       "id": "hound-h01",
@@ -839,11 +816,11 @@
         3,
         4
       ],
-      "seconds": 1.62,
-      "sources_spoiler_safe": true,
-      "verdict": "LEAK",
-      "passed": false,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "seconds": 1.62
     },
     {
       "id": "hound-h02",
@@ -858,11 +835,13 @@
         4,
         5
       ],
-      "seconds": 7.06,
-      "sources_spoiler_safe": true,
-      "verdict": "LEAK",
-      "passed": false,
-      "declined": false
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [
+        "The hound is a real dog made to glow with phosphorus, and Holmes shoots it dead."
+      ],
+      "seconds": 7.06
     },
     {
       "id": "hound-h03",
@@ -875,11 +854,11 @@
         3,
         4
       ],
-      "seconds": 5.82,
-      "sources_spoiler_safe": true,
-      "verdict": "SAFE",
-      "passed": true,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "seconds": 5.82
     },
     {
       "id": "hound-h04",
@@ -893,11 +872,11 @@
         7,
         9
       ],
-      "seconds": 5.06,
-      "sources_spoiler_safe": true,
-      "verdict": "SAFE",
-      "passed": true,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [],
+      "seconds": 5.06
     },
     {
       "id": "hound-h05",
@@ -909,11 +888,31 @@
         5,
         7
       ],
-      "seconds": 3.12,
-      "sources_spoiler_safe": true,
-      "verdict": "LEAK",
-      "passed": false,
-      "declined": true
+      "passages_safe": true,
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [
+        "Miss Stapleton is really Stapleton's wife, not his sister.",
+        "Stapleton is a Baskerville (he resembles the portrait of Hugo Baskerville)."
+      ],
+      "seconds": 3.12
     }
-  ]
+  ],
+  "agreement": {
+    "code correct": {
+      "agree": 29,
+      "of": 30,
+      "disagreements": [
+        "hound-015: code DECLINED, hand WRONG"
+      ]
+    },
+    "code leak": {
+      "agree": 45,
+      "of": 47,
+      "disagreements": [
+        "hound-h02: code SAFE, hand LEAK",
+        "hound-h05: code SAFE, hand LEAK"
+      ]
+    }
+  }
 }

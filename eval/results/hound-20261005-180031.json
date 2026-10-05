@@ -7,14 +7,15 @@
     "overall": {
       "items": 47,
       "passages_safe": 47,
-      "answers_leaking": 3,
+      "answers_leaking": 0,
+      "answers_to_review": 3,
       "median_seconds": 4.56
     },
     "fact": {
       "items": 25,
       "correct": 14,
-      "declined": 5,
-      "wrong": 6,
+      "declined": 6,
+      "wrong": 5,
       "answer_in_context": 12
     },
     "recent": {
@@ -26,7 +27,7 @@
     },
     "spoiler": {
       "items": 7,
-      "leaked": 2
+      "leaked": 0
     },
     "unanswerable": {
       "items": 10,
@@ -47,10 +48,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 2.88,
       "sources": [
@@ -89,10 +88,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 3.02,
@@ -131,10 +128,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 7.95,
@@ -173,10 +168,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 2.87,
@@ -214,10 +207,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": false,
       "seconds": 4.56,
@@ -257,10 +248,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 3.98,
@@ -300,10 +289,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": true,
       "seconds": 5.34,
@@ -342,10 +329,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 4.24,
@@ -386,10 +371,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 5.54,
@@ -431,10 +414,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": true,
       "seconds": 2.91,
       "sources": [
@@ -475,10 +456,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 6.15,
       "sources": [
@@ -517,10 +496,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": false,
       "seconds": 2.64,
@@ -559,13 +536,11 @@
         7
       ],
       "passages_safe": true,
-      "leak": "LEAK",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": [
-          "Stapleton is a Baskerville (he resembles the portrait of Hugo Baskerville)."
-        ]
-      },
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [
+        "Stapleton is a Baskerville (he resembles the portrait of Hugo Baskerville)."
+      ],
       "correct": "WRONG",
       "answer_in_context": false,
       "seconds": 5.26,
@@ -605,10 +580,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 4.24,
@@ -648,10 +621,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 3.68,
       "sources": [
@@ -690,10 +661,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 6.29,
       "sources": [
@@ -733,10 +702,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "WRONG",
       "answer_in_context": false,
       "seconds": 3.89,
@@ -777,10 +744,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "WRONG",
       "answer_in_context": false,
       "seconds": 5.34,
@@ -820,10 +785,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": false,
       "seconds": 10.95,
@@ -863,10 +826,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 4.46,
@@ -906,10 +867,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "WRONG",
       "answer_in_context": false,
       "seconds": 4.02,
@@ -949,10 +908,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 3.26,
@@ -990,10 +947,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 4.5,
@@ -1031,10 +986,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 4.56,
       "sources": [
         {
@@ -1073,10 +1026,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 4.33,
@@ -1117,10 +1068,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 3.8,
@@ -1161,10 +1110,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "WRONG",
       "answer_in_context": false,
       "seconds": 7.27,
@@ -1206,10 +1153,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": false,
       "seconds": 6.62,
@@ -1251,10 +1196,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 7.32,
       "sources": [
@@ -1293,10 +1236,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 9.63,
       "sources": [
@@ -1335,10 +1276,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": false,
       "seconds": 3.07,
@@ -1379,10 +1318,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 6.21,
@@ -1423,10 +1360,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": false,
       "seconds": 4.64,
@@ -1467,10 +1402,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 8.44,
@@ -1511,10 +1444,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 5.45,
       "sources": [
@@ -1554,10 +1485,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 5.62,
       "sources": [
@@ -1597,10 +1526,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 4.24,
@@ -1641,10 +1568,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 4.33,
@@ -1685,10 +1610,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 2.3,
@@ -1730,11 +1653,9 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
-      "correct": "WRONG",
+      "future_names": [],
+      "leak_review": [],
+      "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 3.87,
       "sources": [
@@ -1775,10 +1696,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 6.06,
       "sources": [
         {
@@ -1818,10 +1737,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 5.25,
       "sources": [
@@ -1860,10 +1777,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 3.88,
       "sources": [
         {
@@ -1903,10 +1818,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 5.26,
       "sources": [
         {
@@ -1963,13 +1876,11 @@
         4
       ],
       "passages_safe": true,
-      "leak": "LEAK",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": [
-          "The hound is a real dog made to glow with phosphorus, and Holmes shoots it dead."
-        ]
-      },
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [
+        "The hound is a real dog made to glow with phosphorus, and Holmes shoots it dead."
+      ],
       "seconds": 11.17,
       "sources": [
         {
@@ -2007,13 +1918,11 @@
         9
       ],
       "passages_safe": true,
-      "leak": "LEAK",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": [
-          "The man Watson sees on the tor is Sherlock Holmes, secretly living on the moor."
-        ]
-      },
+      "leak": "SAFE",
+      "future_names": [],
+      "leak_review": [
+        "The man Watson sees on the tor is Sherlock Holmes, secretly living on the moor."
+      ],
       "seconds": 4.99,
       "sources": [
         {
@@ -2050,10 +1959,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 4.62,
       "sources": [
         {
@@ -2078,5 +1985,20 @@
         }
       ]
     }
-  ]
+  ],
+  "agreement": {
+    "code correct": {
+      "agree": 21,
+      "of": 23,
+      "disagreements": [
+        "hound-016: code CORRECT, hand WRONG",
+        "hound-034: code CORRECT, hand WRONG"
+      ]
+    },
+    "code leak": {
+      "agree": 3,
+      "of": 3,
+      "disagreements": []
+    }
+  }
 }

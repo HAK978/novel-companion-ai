@@ -8,6 +8,7 @@
       "items": 47,
       "passages_safe": 47,
       "answers_leaking": 0,
+      "answers_to_review": 0,
       "median_seconds": 4.14
     },
     "fact": {
@@ -47,10 +48,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 5.19,
       "sources": [
@@ -89,10 +88,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 3.69,
@@ -131,10 +128,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 6.69,
@@ -173,10 +168,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 1.64,
@@ -214,10 +207,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": false,
       "seconds": 3.78,
@@ -257,10 +248,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 5.14,
@@ -300,10 +289,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": true,
       "seconds": 2.2,
@@ -342,10 +329,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 3.19,
@@ -386,10 +371,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 2.63,
@@ -431,10 +414,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 5.98,
       "sources": [
@@ -475,10 +456,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 4.67,
       "sources": [
@@ -517,10 +496,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 1.43,
@@ -560,10 +537,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "WRONG",
       "answer_in_context": false,
       "seconds": 6.07,
@@ -603,10 +578,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 2.67,
@@ -646,10 +619,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 4.39,
       "sources": [
@@ -688,10 +659,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 5.23,
       "sources": [
@@ -731,10 +700,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 1.24,
@@ -775,10 +742,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": false,
       "seconds": 8.48,
@@ -818,10 +783,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": false,
       "seconds": 11.17,
@@ -861,10 +824,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 4.14,
@@ -904,10 +865,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "WRONG",
       "answer_in_context": false,
       "seconds": 8.76,
@@ -947,10 +906,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 2.67,
@@ -988,10 +945,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 6.69,
@@ -1029,10 +984,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 1.54,
       "sources": [
         {
@@ -1071,10 +1024,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 4.64,
@@ -1115,10 +1066,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 5.75,
@@ -1159,10 +1108,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "WRONG",
       "answer_in_context": false,
       "seconds": 4.91,
@@ -1204,10 +1151,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 1.35,
@@ -1249,10 +1194,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 5.71,
       "sources": [
@@ -1291,10 +1234,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 4.79,
       "sources": [
@@ -1333,10 +1274,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": false,
       "seconds": 3.76,
@@ -1377,10 +1316,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "CORRECT",
       "answer_in_context": true,
       "seconds": 6.2,
@@ -1421,10 +1358,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 1.41,
@@ -1465,10 +1400,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 7.2,
@@ -1509,10 +1442,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 5.15,
       "sources": [
@@ -1552,10 +1483,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 2.52,
       "sources": [
@@ -1595,10 +1524,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 2.01,
@@ -1639,10 +1566,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 1.68,
@@ -1683,10 +1608,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": true,
       "seconds": 1.39,
@@ -1728,10 +1651,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "correct": "DECLINED",
       "answer_in_context": false,
       "seconds": 1.44,
@@ -1773,10 +1694,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 9.1,
       "sources": [
         {
@@ -1816,10 +1735,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "flags_unknown": false,
       "seconds": 1.57,
       "sources": [
@@ -1858,10 +1775,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 1.61,
       "sources": [
         {
@@ -1901,10 +1816,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 4.39,
       "sources": [
         {
@@ -1962,10 +1875,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 5.85,
       "sources": [
         {
@@ -2004,10 +1915,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 3.93,
       "sources": [
         {
@@ -2044,10 +1953,8 @@
       ],
       "passages_safe": true,
       "leak": "SAFE",
-      "leak_evidence": {
-        "future_names": [],
-        "reveals": []
-      },
+      "future_names": [],
+      "leak_review": [],
       "seconds": 1.43,
       "sources": [
         {
@@ -2072,5 +1979,12 @@
         }
       ]
     }
-  ]
+  ],
+  "agreement": {
+    "code correct": {
+      "agree": 15,
+      "of": 15,
+      "disagreements": []
+    }
+  }
 }

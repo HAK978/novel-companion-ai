@@ -1,5 +1,5 @@
 {
- "about": "Hand grades of stored answers, used to measure the LLM judge (run_eval.py --rejudge RESULTS --labels THIS). Graded 2026-10-05 against the book text. correct: CORRECT, PARTIAL, WRONG or DECLINED against accepted answers; leak: whether the answer discloses anything from eval/sets/hound.reveals.json revealed after the reader's chapter; abstain: whether an answer about a nonexistent person said so (ABSTAINED) or told anything about them (INVENTED). hound-037 and hound-046 were dropped from the set and are not graded. Corrected 2026-10-05: no-retrieval hound-017 pairs 'Rodger Baskerville' with 'his wife, Beryl' at chapter 6, which is the chapter-15 twist; first graded SAFE.",
+ "about": "Hand grades of stored answers, used to measure the LLM judge (run_eval.py --rejudge RESULTS --labels THIS). Graded 2026-10-05 against the book text. correct: CORRECT, PARTIAL, WRONG or DECLINED against accepted answers; leak: whether the answer discloses anything from eval/sets/hound.reveals.json revealed after the reader's chapter; abstain: whether an answer about a nonexistent person said so (ABSTAINED) or told anything about them (INVENTED). hound-037 and hound-046 were dropped from the set and are not graded. Corrected 2026-10-05: no-retrieval hound-017 pairs 'Rodger Baskerville' with 'his wife, Beryl' at chapter 6, which is the chapter-15 twist; first graded SAFE. The four 17:48-18:00 runs are graded only where checked: every answer the key terms passed, the new-prompt runs' failures, and every answer flagged for leaks.",
  "runs": {
   "eval/results/hound-20261005-154032.json": {
    "hound-003": {
@@ -364,6 +364,254 @@
     "leak": "SAFE"
    },
    "hound-h05": {
+    "leak": "SAFE"
+   }
+  },
+  "eval/results/hound-20261005-174829.json": {
+   "hound-003": {
+    "correct": "CORRECT"
+   },
+   "hound-004": {
+    "correct": "CORRECT"
+   },
+   "hound-006": {
+    "correct": "CORRECT"
+   },
+   "hound-007": {
+    "correct": "CORRECT"
+   },
+   "hound-010": {
+    "correct": "CORRECT"
+   },
+   "hound-016": {
+    "correct": "CORRECT"
+   },
+   "hound-021": {
+    "correct": "PARTIAL"
+   },
+   "hound-022": {
+    "correct": "CORRECT"
+   },
+   "hound-024": {
+    "correct": "CORRECT"
+   },
+   "hound-026": {
+    "correct": "CORRECT"
+   },
+   "hound-027": {
+    "correct": "CORRECT"
+   },
+   "hound-031": {
+    "correct": "CORRECT"
+   },
+   "hound-032": {
+    "correct": "CORRECT"
+   },
+   "hound-042": {
+    "correct": "CORRECT"
+   },
+   "hound-043": {
+    "correct": "CORRECT"
+   }
+  },
+  "eval/results/hound-20261005-175210.json": {
+   "hound-003": {
+    "correct": "CORRECT"
+   },
+   "hound-004": {
+    "correct": "CORRECT"
+   },
+   "hound-006": {
+    "correct": "CORRECT"
+   },
+   "hound-007": {
+    "correct": "CORRECT"
+   },
+   "hound-010": {
+    "correct": "CORRECT"
+   },
+   "hound-022": {
+    "correct": "CORRECT"
+   },
+   "hound-024": {
+    "correct": "CORRECT"
+   },
+   "hound-026": {
+    "correct": "CORRECT"
+   },
+   "hound-027": {
+    "correct": "CORRECT"
+   },
+   "hound-031": {
+    "correct": "CORRECT"
+   },
+   "hound-032": {
+    "correct": "CORRECT"
+   },
+   "hound-042": {
+    "correct": "CORRECT"
+   },
+   "hound-043": {
+    "correct": "CORRECT"
+   },
+   "hound-053": {
+    "leak": "LEAK"
+   },
+   "hound-h02": {
+    "leak": "LEAK"
+   }
+  },
+  "eval/results/hound-20261005-175630.json": {
+   "hound-003": {
+    "correct": "CORRECT"
+   },
+   "hound-004": {
+    "correct": "CORRECT"
+   },
+   "hound-006": {
+    "correct": "CORRECT"
+   },
+   "hound-007": {
+    "correct": "CORRECT"
+   },
+   "hound-010": {
+    "correct": "CORRECT"
+   },
+   "hound-016": {
+    "correct": "CORRECT"
+   },
+   "hound-022": {
+    "correct": "PARTIAL"
+   },
+   "hound-024": {
+    "correct": "CORRECT"
+   },
+   "hound-026": {
+    "correct": "CORRECT"
+   },
+   "hound-027": {
+    "correct": "CORRECT"
+   },
+   "hound-031": {
+    "correct": "CORRECT"
+   },
+   "hound-032": {
+    "correct": "CORRECT"
+   },
+   "hound-034": {
+    "correct": "WRONG"
+   },
+   "hound-042": {
+    "correct": "CORRECT"
+   },
+   "hound-043": {
+    "correct": "CORRECT"
+   },
+   "hound-044": {
+    "correct": "CORRECT"
+   },
+   "hound-049": {
+    "correct": "CORRECT"
+   },
+   "hound-051": {
+    "correct": "CORRECT"
+   },
+   "hound-019": {
+    "correct": "WRONG"
+   },
+   "hound-021": {
+    "correct": "WRONG"
+   },
+   "hound-025": {
+    "correct": "PARTIAL"
+   },
+   "hound-033": {
+    "correct": "PARTIAL"
+   },
+   "hound-012": {
+    "leak": "SAFE"
+   },
+   "hound-h04": {
+    "leak": "SAFE"
+   }
+  },
+  "eval/results/hound-20261005-180031.json": {
+   "hound-003": {
+    "correct": "CORRECT"
+   },
+   "hound-004": {
+    "correct": "CORRECT"
+   },
+   "hound-006": {
+    "correct": "CORRECT"
+   },
+   "hound-007": {
+    "correct": "CORRECT"
+   },
+   "hound-010": {
+    "correct": "CORRECT"
+   },
+   "hound-014": {
+    "correct": "CORRECT"
+   },
+   "hound-016": {
+    "correct": "WRONG"
+   },
+   "hound-022": {
+    "correct": "CORRECT"
+   },
+   "hound-024": {
+    "correct": "CORRECT"
+   },
+   "hound-026": {
+    "correct": "CORRECT"
+   },
+   "hound-027": {
+    "correct": "CORRECT"
+   },
+   "hound-031": {
+    "correct": "CORRECT"
+   },
+   "hound-032": {
+    "correct": "CORRECT"
+   },
+   "hound-034": {
+    "correct": "WRONG"
+   },
+   "hound-042": {
+    "correct": "CORRECT"
+   },
+   "hound-043": {
+    "correct": "CORRECT"
+   },
+   "hound-044": {
+    "correct": "CORRECT"
+   },
+   "hound-051": {
+    "correct": "CORRECT"
+   },
+   "hound-019": {
+    "correct": "WRONG"
+   },
+   "hound-021": {
+    "correct": "WRONG"
+   },
+   "hound-025": {
+    "correct": "PARTIAL"
+   },
+   "hound-033": {
+    "correct": "PARTIAL"
+   },
+   "hound-052": {
+    "correct": "DECLINED"
+   },
+   "hound-015": {
+    "leak": "SAFE"
+   },
+   "hound-h03": {
+    "leak": "SAFE"
+   },
+   "hound-h04": {
     "leak": "SAFE"
    }
   }
