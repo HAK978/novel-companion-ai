@@ -6,11 +6,6 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture(scope="module")
-def ingestion_tasks():
-    return load_module("ingestion", "tasks.py")
-
-
-@pytest.fixture(scope="module")
 def ingestion_main():
     return load_module("ingestion", "main.py")
 
@@ -81,9 +76,13 @@ def test_ingest_from_source_passes_limits_through(client, queued):
 class FakeCollection:
     def __init__(self):
         self.added = []
+        self.deleted = []
 
-    def add(self, documents, metadatas, ids):
+    def upsert(self, documents, metadatas, ids):
         self.added.append({"documents": documents, "metadatas": metadatas, "ids": ids})
+
+    def delete(self, where):
+        self.deleted.append(where)
 
 
 class FakeConnection:

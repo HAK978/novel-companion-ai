@@ -2,6 +2,7 @@ from typing import Any
 
 import chromadb
 from config import CHROMADB_URL
+from vector_store import open_collection
 
 COMPLEX_KEYWORDS = [
     "summarize", "explain", "arc", "story", "what happened", "tell me about"
@@ -23,9 +24,9 @@ def _get_client():
     return _client
 
 
-def get_collection(collection_name: str = "shadow_slave"):
+def get_collection(collection_name: str):
     if collection_name not in _collections:
-        _collections[collection_name] = _get_client().get_or_create_collection(collection_name)
+        _collections[collection_name] = open_collection(_get_client(), collection_name)
     return _collections[collection_name]
 
 
@@ -37,7 +38,8 @@ def search_chunks(
     query: str,
     current_chapter: int,
     n_results: int = 5,
-    collection_name: str = "shadow_slave",
+    *,
+    collection_name: str,
     min_chapter: int | None = None,
 ) -> list[dict[str, Any]]:
     """min_chapter sets a floor for range-scoped questions (e.g. summaries).
@@ -79,6 +81,7 @@ def search_chunks(
                 "text": doc,
                 "chapter_number": metadata["chapter_number"],
                 "chapter_title": metadata.get("chapter_title", ""),
+                # cosine distance under the pinned model, so this is cosine similarity
                 "relevance_score": round(1 - distance, 4),
             })
 

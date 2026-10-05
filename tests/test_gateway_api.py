@@ -19,6 +19,9 @@ class FakeResult:
     def fetchall(self):
         return []
 
+    def scalar(self):
+        return self._row[0] if self._row else None
+
 
 class FakeConnection:
     def __init__(self, statements, row=None):
@@ -296,3 +299,49 @@ def test_query_surfaces_generation_failure(client, wire):
     )
 
     assert response.status_code == 502
+
+
+# --- creating novels, and reading position on character endpoints ---
+
+
+def test_new_novel_clears_a_leftover_collection_before_it_exists(client, wire):
+    # A database reset that kept the vector store would otherwise hand the new novel the
+    # old novel's chunks under the same collection name
+    calls, engine = wire({"/delete-collection": {"deleted": True}}, row=(7, "New Novel", "now"))
+
+    body = client.post("/novels", json={"title": "New Novel"}).json()
+
+    assert body["id"] == 7
+    assert calls[0]["payload"] == {"novel_id": 7}
+    statements = [s["sql"] for s in engine.statements]
+    assert "nextval" in statements[0]
+    assert "INSERT INTO novels" in statements[1]
+
+
+def test_new_novel_is_not_created_when_its_collection_cannot_be_checked(
+    client, gateway_main, monkeypatch
+):
+    class Unreachable:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, url, **kwargs):
+            raise gateway_main.httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(gateway_main.httpx, "AsyncClient", lambda *a, **k: Unreachable())
+    engine = FakeEngine(row=(7,))
+    monkeypatch.setattr(gateway_main, "engine", engine)
+
+    response = client.post("/novels", json={"title": "New Novel"})
+
+    assert response.status_code == 503
+    assert not any("INSERT INTO novels" in s["sql"] for s in engine.statements)
+
+
+@pytest.mark.parametrize("path", ["/characters/list", "/characters/Elena"])
+def test_character_endpoints_require_reading_position(client, path):
+    # it defaulted to 9999, so a forgotten parameter returned the whole graph
+    assert client.get(path, params={"novel_id": 1}).status_code == 422

@@ -16,6 +16,10 @@ until docker exec novel-companion-ai-postgres-1 pg_isready -U novel -d novel_com
   sleep 1
 done
 
+echo "  applying database migrations"
+DATABASE_URL="${DATABASE_URL:-postgresql://novel:novel@localhost:5432/novel_companion}" \
+  "$VENV/python" "$ROOT/scripts/migrate.py"
+
 start_service () {
   local name=$1 port=$2 dir=$3
   if curl -s -m 2 "http://localhost:$port/health" > /dev/null 2>&1; then

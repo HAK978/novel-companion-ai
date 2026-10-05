@@ -11,6 +11,10 @@
 
 ALTER TABLE characters DROP CONSTRAINT IF EXISTS characters_name_key;
 ALTER TABLE characters DROP CONSTRAINT IF EXISTS characters_novel_name_unique;
+-- Databases from early development carry a hand-created unique index under the same name.
+-- It has to go after the constraint drop: an index that backs a constraint cannot be
+-- dropped directly, and on a fresh database this is a no-op.
+DROP INDEX IF EXISTS characters_novel_name_unique;
 ALTER TABLE characters ADD CONSTRAINT characters_novel_name_unique UNIQUE (novel_id, name);
 
 ALTER TABLE chapter_summaries

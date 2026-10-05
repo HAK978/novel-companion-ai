@@ -39,3 +39,7 @@ chroma-data/
 
 # Local planning notes, not part of the project
 ROADMAP.md
+
+# Local database backups and coverage data
+backups/
+.coverage

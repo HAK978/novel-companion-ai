@@ -8,6 +8,7 @@ from config import (
     RETRIEVAL_SERVICE_URL,
 )
 from fastapi import FastAPI, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
@@ -23,6 +24,10 @@ app.add_middleware(
 )
 
 engine = create_engine(DATABASE_URL)
+
+# Database calls are synchronous. Handlers that only touch the database are plain `def`
+# (FastAPI runs those in a threadpool); handlers that also await other services push their
+# database work through run_in_threadpool, so neither blocks the event loop.
 
 
 # --- Request / Response models ---
@@ -82,27 +87,56 @@ class ProgressRequest(BaseModel):
 
 @app.post("/novels")
 async def create_novel(request: NovelCreate):
-    with engine.connect() as conn:
-        result = conn.execute(
-            text("""
-                INSERT INTO novels (title, author, source_type, source_url)
-                VALUES (:title, :author, :source_type, :source_url)
-                RETURNING id, title, created_at
-            """),
-            {
-                "title": request.title,
-                "author": request.author,
-                "source_type": request.source_type,
-                "source_url": request.source_url,
-            },
-        )
-        row = result.fetchone()
-        conn.commit()
+    def reserve_id():
+        with engine.connect() as conn:
+            return conn.execute(
+                text("SELECT nextval(pg_get_serial_sequence('novels', 'id'))")
+            ).scalar()
+
+    novel_id = await run_in_threadpool(reserve_id)
+
+    # Collections are named by novel id. The id is new to Postgres, so a collection that
+    # already carries the name is left over from a database reset that kept the vector store,
+    # and ingesting into it would mix another novel's chunks into this one. Clear it before
+    # the novel exists, so a failure here leaves nothing half-created.
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            resp = await client.post(
+                f"{RETRIEVAL_SERVICE_URL}/delete-collection", json={"novel_id": novel_id}
+            )
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Retrieval service unavailable: cannot confirm the new novel's "
+                       "vector collection is empty, so the novel was not created.",
+            ) from exc
+
+    def insert():
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("""
+                    INSERT INTO novels (id, title, author, source_type, source_url)
+                    VALUES (:id, :title, :author, :source_type, :source_url)
+                    RETURNING id, title, created_at
+                """),
+                {
+                    "id": novel_id,
+                    "title": request.title,
+                    "author": request.author,
+                    "source_type": request.source_type,
+                    "source_url": request.source_url,
+                },
+            ).fetchone()
+            conn.commit()
+            return row
+
+    row = await run_in_threadpool(insert)
     return {"id": row[0], "title": row[1], "created_at": str(row[2])}
 
 
 @app.get("/novels")
-async def list_novels():
+def list_novels():
     with engine.connect() as conn:
         rows = conn.execute(
             text("SELECT id, title, author, source_type, total_chapters, created_at FROM novels ORDER BY id")
@@ -118,7 +152,7 @@ async def list_novels():
 
 
 @app.get("/novels/{novel_id}")
-async def get_novel(novel_id: int):
+def get_novel(novel_id: int):
     with engine.connect() as conn:
         row = conn.execute(
             text(
@@ -138,6 +172,22 @@ async def get_novel(novel_id: int):
 
 @app.delete("/novels/{novel_id}")
 async def delete_novel(novel_id: int):
+    await run_in_threadpool(_delete_novel_rows, novel_id)
+
+    # Delete ChromaDB collection
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            await client.post(
+                f"{RETRIEVAL_SERVICE_URL}/delete-collection",
+                json={"novel_id": novel_id},
+            )
+        except Exception:
+            pass
+
+    return {"status": "deleted", "novel_id": novel_id}
+
+
+def _delete_novel_rows(novel_id: int) -> None:
     with engine.connect() as conn:
         # Mentions/relationships may predate novel_id stamping; also match via the character
         conn.execute(text("""
@@ -154,18 +204,6 @@ async def delete_novel(novel_id: int):
             conn.execute(text(f"DELETE FROM {table} WHERE novel_id = :id"), {"id": novel_id})
         conn.execute(text("DELETE FROM novels WHERE id = :id"), {"id": novel_id})
         conn.commit()
-
-    # Delete ChromaDB collection
-    async with httpx.AsyncClient(timeout=10) as client:
-        try:
-            await client.post(
-                f"{RETRIEVAL_SERVICE_URL}/delete-collection",
-                json={"novel_id": novel_id},
-            )
-        except Exception:
-            pass
-
-    return {"status": "deleted", "novel_id": novel_id}
 
 
 # --- Ingestion ---
@@ -200,7 +238,7 @@ async def ingest_status(task_id: str):
 # --- Characters ---
 
 @app.get("/characters/list")
-async def list_characters(novel_id: int, current_chapter: int = 9999):
+async def list_characters(novel_id: int, current_chapter: int):
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             f"{RETRIEVAL_SERVICE_URL}/characters",
@@ -210,7 +248,7 @@ async def list_characters(novel_id: int, current_chapter: int = 9999):
 
 
 @app.get("/characters/{name}")
-async def character_recall(name: str, novel_id: int, current_chapter: int = 9999):
+async def character_recall(name: str, novel_id: int, current_chapter: int):
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             f"{RETRIEVAL_SERVICE_URL}/characters/{name}",
@@ -259,15 +297,19 @@ async def query(request: QueryRequest):
             raise HTTPException(status_code=502, detail="Generation service failed")
         gen_data = gen_resp.json()
 
-    with engine.connect() as conn:
-        conn.execute(
-            text("""
-                INSERT INTO search_history (novel_id, query, results_count, timestamp)
-                VALUES (:nid, :q, :c, :ts)
-            """),
-            {"nid": request.novel_id, "q": request.query, "c": len(results), "ts": datetime.now(UTC)},
-        )
-        conn.commit()
+    def record_search():
+        with engine.connect() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO search_history (novel_id, query, results_count, timestamp)
+                    VALUES (:nid, :q, :c, :ts)
+                """),
+                {"nid": request.novel_id, "q": request.query, "c": len(results),
+                 "ts": datetime.now(UTC)},
+            )
+            conn.commit()
+
+    await run_in_threadpool(record_search)
 
     return QueryResponse(
         answer=gen_data.get("answer"),
@@ -307,14 +349,17 @@ async def summarize(request: SummarizeRequest):
         }
 
     # Cache is keyed by novel as well as range; a range alone collides across novels.
-    with engine.connect() as conn:
-        cached = conn.execute(
-            text("""
-                SELECT summary FROM chapter_summaries
-                WHERE novel_id = :nid AND start_chapter = :s AND end_chapter = :e
-            """),
-            {"nid": request.novel_id, "s": request.start_chapter, "e": end_ch},
-        ).fetchone()
+    def cached_summary():
+        with engine.connect() as conn:
+            return conn.execute(
+                text("""
+                    SELECT summary FROM chapter_summaries
+                    WHERE novel_id = :nid AND start_chapter = :s AND end_chapter = :e
+                """),
+                {"nid": request.novel_id, "s": request.start_chapter, "e": end_ch},
+            ).fetchone()
+
+    cached = await run_in_threadpool(cached_summary)
 
     if cached:
         return {
@@ -366,16 +411,19 @@ async def summarize(request: SummarizeRequest):
     if not summary:
         raise HTTPException(status_code=502, detail="Generation returned no summary")
 
-    with engine.connect() as conn:
-        conn.execute(
-            text("""
-                INSERT INTO chapter_summaries (novel_id, start_chapter, end_chapter, summary)
-                VALUES (:nid, :s, :e, :sum)
-                ON CONFLICT (novel_id, start_chapter, end_chapter) DO UPDATE SET summary = :sum
-            """),
-            {"nid": request.novel_id, "s": request.start_chapter, "e": end_ch, "sum": summary},
-        )
-        conn.commit()
+    def cache_summary():
+        with engine.connect() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO chapter_summaries (novel_id, start_chapter, end_chapter, summary)
+                    VALUES (:nid, :s, :e, :sum)
+                    ON CONFLICT (novel_id, start_chapter, end_chapter) DO UPDATE SET summary = :sum
+                """),
+                {"nid": request.novel_id, "s": request.start_chapter, "e": end_ch, "sum": summary},
+            )
+            conn.commit()
+
+    await run_in_threadpool(cache_summary)
 
     return {
         "summary": summary,
@@ -387,12 +435,15 @@ async def summarize(request: SummarizeRequest):
 
 @app.post("/catch-me-up")
 async def catch_me_up(request: CatchMeUpRequest):
-    # Get reading progress
-    with engine.connect() as conn:
-        row = conn.execute(
-            text("SELECT current_chapter FROM reading_progress WHERE novel_id = :nid AND user_id = :uid"),
-            {"nid": request.novel_id, "uid": request.user_id},
-        ).fetchone()
+    def progress():
+        with engine.connect() as conn:
+            return conn.execute(
+                text("SELECT current_chapter FROM reading_progress "
+                     "WHERE novel_id = :nid AND user_id = :uid"),
+                {"nid": request.novel_id, "uid": request.user_id},
+            ).fetchone()
+
+    row = await run_in_threadpool(progress)
 
     if not row or not row[0]:
         return {"error": "No reading progress found. Set your progress first with POST /progress."}
@@ -432,7 +483,7 @@ async def catch_me_up(request: CatchMeUpRequest):
 # --- Reading Progress ---
 
 @app.post("/progress")
-async def update_progress(request: ProgressRequest):
+def update_progress(request: ProgressRequest):
     with engine.connect() as conn:
         conn.execute(
             text("""
@@ -457,7 +508,7 @@ async def update_progress(request: ProgressRequest):
 
 
 @app.get("/progress/{novel_id}/{user_id}")
-async def get_progress(novel_id: int, user_id: str = "default"):
+def get_progress(novel_id: int, user_id: str = "default"):
     with engine.connect() as conn:
         row = conn.execute(
             text(
@@ -490,9 +541,12 @@ async def health():
             except Exception as e:
                 status[name] = {"status": "unreachable", "error": str(e)}
 
-    try:
+    def ping_database():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+
+    try:
+        await run_in_threadpool(ping_database)
         status["postgres"] = {"status": "ok"}
     except Exception as e:
         status["postgres"] = {"status": "unreachable", "error": str(e)}

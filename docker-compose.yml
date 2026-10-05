@@ -11,7 +11,9 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
+      # Schema comes from scripts/migrate.py, which records what it applies. The
+      # docker-entrypoint-initdb.d mount used before ran files once, recorded nothing,
+      # and never ran anything added later, which is how migration 003 went unapplied.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-novel} -d ${POSTGRES_DB:-novel_companion}"]
       interval: 5s

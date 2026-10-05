@@ -13,6 +13,7 @@ from config import (
 )
 from sqlalchemy import create_engine
 from sqlalchemy import text as sa_text
+from vector_store import UnpinnedCollectionError, open_collection
 
 celery_app = Celery("ingestion", broker=REDIS_URL, backend=REDIS_URL)
 celery_app.conf.update(
@@ -39,8 +40,41 @@ def _get_collection(collection_name: str):
         port = int(CHROMADB_URL.split(":")[-1])
         _chroma_client = chromadb.HttpClient(host=host, port=port)
     if collection_name not in _collections:
-        _collections[collection_name] = _chroma_client.get_or_create_collection(collection_name)
+        _collections[collection_name] = open_collection(_chroma_client, collection_name)
     return _collections[collection_name]
+
+
+def _replace_chapter_chunks(collection_name, chapter_num, ids, chunks, metadatas):
+    """Make the stored chunks for one chapter exactly `chunks`.
+
+    `add()` silently skips ids that already exist, so re-ingesting a chapter used to keep its
+    old text, plus any surplus old chunks when the new chunking yielded fewer, while the task
+    reported success. Upserting replaces existing ids; pruning removes the surplus. In that
+    order a crash midway leaves extra chunks at worst, never a chapter with none.
+    """
+    batch_size = 100
+
+    def write(collection):
+        for start in range(0, len(chunks), batch_size):
+            end = start + batch_size
+            collection.upsert(
+                documents=chunks[start:end],
+                metadatas=metadatas[start:end],
+                ids=ids[start:end],
+            )
+        collection.delete(where={"$and": [
+            {"chapter_number": chapter_num},
+            {"chunk_index": {"$gte": len(chunks)}},
+        ]})
+
+    try:
+        write(_get_collection(collection_name))
+    except UnpinnedCollectionError:
+        raise
+    except Exception:
+        # the cached handle may be stale (collection deleted and recreated); refresh once
+        _collections.pop(collection_name, None)
+        write(_get_collection(collection_name))
 
 
 def _process_chapter(chapter_data: dict, extract_entities: bool = False) -> dict:
@@ -54,11 +88,15 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False) -> dict
     answer character questions from RAG without pre-extracted entities.
     """
     novel_id = chapter_data.get("novel_id")
+    if not novel_id:
+        # There used to be a fallback collection named after the first novel ever ingested;
+        # chapters without a novel landed there, unreachable by any query.
+        raise ValueError("novel_id is required to ingest a chapter")
     chapter_num = chapter_data["number"]
     title = chapter_data.get("title", f"Chapter {chapter_num}")
     volume = chapter_data.get("volume", 1)
 
-    collection_name = f"novel_{novel_id}" if novel_id else "shadow_slave"
+    collection_name = f"novel_{novel_id}"
 
     # 1. Clean HTML
     text = clean_html(chapter_data["content"])
@@ -67,10 +105,11 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False) -> dict
     # 2. Chunk text
     chunks = chunk_text(text, CHUNK_SIZE)
     if not chunks:
+        # a re-ingested chapter that now cleans to nothing must not keep its old chunks
+        _replace_chapter_chunks(collection_name, chapter_num, [], [], [])
         return {"status": "skipped", "chapter": chapter_num, "reason": "no content"}
 
     # 3. Store in ChromaDB
-    collection = _get_collection(collection_name)
 
     ids = [f"ch_{chapter_num:04d}_chunk_{i:03d}" for i in range(len(chunks))]
     metadatas = [
@@ -83,25 +122,7 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False) -> dict
         for i in range(len(chunks))
     ]
 
-    batch_size = 100
-    for start in range(0, len(chunks), batch_size):
-        end = start + batch_size
-        try:
-            collection.add(
-                documents=chunks[start:end],
-                metadatas=metadatas[start:end],
-                ids=ids[start:end],
-            )
-        except Exception:
-            # cached handle may be stale (collection deleted/recreated) —
-            # refresh once and retry
-            _collections.pop(collection_name, None)
-            collection = _get_collection(collection_name)
-            collection.add(
-                documents=chunks[start:end],
-                metadatas=metadatas[start:end],
-                ids=ids[start:end],
-            )
+    _replace_chapter_chunks(collection_name, chapter_num, ids, chunks, metadatas)
 
     # 4. Update PostgreSQL
     with engine.connect() as conn:
@@ -161,101 +182,103 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False) -> dict
     }
 
 
+# Characters can be extracted from chapters in any order (re-ingestion, parallel workers),
+# so "first seen" values keep the earliest chapter rather than whichever arrived first. The
+# description comes from the earliest chapter too: one written from a later chapter can
+# carry what that chapter revealed, and an earlier chapter arriving late resets it.
+_UPSERT_CHARACTER = sa_text("""
+    INSERT INTO characters (novel_id, name, first_appearance, description, updated_at)
+    VALUES (:nid, :name, :ch, :desc, :ts)
+    ON CONFLICT (novel_id, name) DO UPDATE SET
+        description = CASE
+            WHEN EXCLUDED.first_appearance < characters.first_appearance
+                THEN EXCLUDED.description
+            WHEN EXCLUDED.first_appearance = characters.first_appearance
+                THEN COALESCE(characters.description, EXCLUDED.description)
+            ELSE characters.description
+        END,
+        first_appearance = LEAST(characters.first_appearance, EXCLUDED.first_appearance),
+        updated_at = EXCLUDED.updated_at
+    RETURNING id
+""")
+
+# Each alias records the chapter that revealed it; reads hide it before then.
+_UPSERT_ALIAS = sa_text("""
+    INSERT INTO character_aliases (character_id, alias, first_chapter)
+    VALUES (:cid, :alias, :ch)
+    ON CONFLICT (character_id, alias) DO UPDATE SET
+        first_chapter = LEAST(character_aliases.first_chapter, EXCLUDED.first_chapter)
+""")
+
+_INSERT_MENTION = sa_text("""
+    INSERT INTO character_mentions (novel_id, character_id, chapter_number, context)
+    VALUES (:nid, :cid, :ch, :ctx)
+    ON CONFLICT (character_id, chapter_number) DO NOTHING
+""")
+
+_UPSERT_RELATIONSHIP = sa_text("""
+    INSERT INTO character_relationships
+        (novel_id, character_a_id, character_b_id, relationship_type, first_chapter, updated_at)
+    VALUES (:nid, :a, :b, :rel, :ch, :ts)
+    ON CONFLICT (character_a_id, character_b_id, relationship_type) DO UPDATE SET
+        first_chapter = LEAST(character_relationships.first_chapter, EXCLUDED.first_chapter),
+        updated_at = EXCLUDED.updated_at
+""")
+
+
 def _store_entities(novel_id: int, chapter_num: int, characters: list) -> int:
-    """Store extracted character entities in PostgreSQL."""
+    """Store one chapter's extracted characters, aliases, mentions and relationships."""
     if not characters or not novel_id:
         return 0
 
+    now = datetime.now(UTC)
     stored = 0
     with engine.connect() as conn:
         for char in characters:
-            name = char.get("name", "").strip()
-            if not name or len(name) < 2:
+            name = (char.get("name") or "").strip()
+            if len(name) < 2:
                 continue
+            role = (char.get("role") or "").strip() or None
 
-            aliases = char.get("aliases", [])
-            role = char.get("role", "")
+            char_id = conn.execute(
+                _UPSERT_CHARACTER,
+                {"nid": novel_id, "name": name, "ch": chapter_num, "desc": role, "ts": now},
+            ).scalar_one()
 
-            # Upsert character
-            result = conn.execute(
-                sa_text("""
-                    INSERT INTO characters
-                        (novel_id, name, aliases, first_appearance, description, updated_at)
-                    VALUES (:nid, :name, :aliases, :ch, :desc, :ts)
-                    ON CONFLICT (novel_id, name)
-                    DO UPDATE SET
-                        aliases = CASE
-                            WHEN characters.aliases IS NULL THEN :aliases
-                            ELSE characters.aliases || :aliases
-                        END,
-                        description = CASE
-                            WHEN characters.description IS NULL THEN :desc
-                            ELSE characters.description
-                        END,
-                        updated_at = :ts
-                    RETURNING id
-                """),
-                {
-                    "nid": novel_id,
-                    "name": name,
-                    "aliases": aliases,
-                    "ch": chapter_num,
-                    "desc": role,
-                    "ts": datetime.now(UTC),
-                },
-            )
-            row = result.fetchone()
-            if not row:
-                continue
-            char_id = row[0]
+            aliases = {
+                alias.strip()
+                for alias in char.get("aliases") or []
+                if isinstance(alias, str)
+                and alias.strip()
+                and alias.strip().lower() != name.lower()
+            }
+            for alias in sorted(aliases):
+                conn.execute(_UPSERT_ALIAS, {"cid": char_id, "alias": alias, "ch": chapter_num})
 
-            # Record mention
             conn.execute(
-                sa_text("""
-                    INSERT INTO character_mentions (novel_id, character_id, chapter_number, context)
-                    VALUES (:nid, :cid, :ch, :ctx)
-                    ON CONFLICT (character_id, chapter_number) DO NOTHING
-                """),
-                {"nid": novel_id, "cid": char_id, "ch": chapter_num, "ctx": role[:200]},
+                _INSERT_MENTION,
+                {"nid": novel_id, "cid": char_id, "ch": chapter_num, "ctx": (role or "")[:200]},
             )
 
-            # Store relationships
-            for rel in char.get("relationships", []):
-                other_name = rel.get("character", "").strip()
-                rel_type = rel.get("type", "unknown")
-                if not other_name:
+            for rel in char.get("relationships") or []:
+                other_name = (rel.get("character") or "").strip()
+                if len(other_name) < 2 or other_name == name:
                     continue
-
-                # Get or create the other character
-                other_result = conn.execute(
-                    sa_text("""
-                        INSERT INTO characters (novel_id, name, first_appearance, updated_at)
-                        VALUES (:nid, :name, :ch, :ts)
-                        ON CONFLICT (novel_id, name)
-                        DO UPDATE SET updated_at = :ts
-                        RETURNING id
-                    """),
-                    {"nid": novel_id, "name": other_name, "ch": chapter_num, "ts": datetime.now(UTC)},
-                )
-                other_row = other_result.fetchone()
-                if not other_row:
-                    continue
-
+                # Known only as a relationship target so far: no description of its own,
+                # which also clears a later-chapter description if this chapter is earlier.
+                other_id = conn.execute(
+                    _UPSERT_CHARACTER,
+                    {"nid": novel_id, "name": other_name, "ch": chapter_num, "desc": None, "ts": now},
+                ).scalar_one()
                 conn.execute(
-                    sa_text("""
-                        INSERT INTO character_relationships
-                            (novel_id, character_a_id, character_b_id,
-                             relationship_type, first_chapter, updated_at)
-                        VALUES (:nid, :a, :b, :rel, :ch, :ts)
-                        ON CONFLICT (character_a_id, character_b_id, relationship_type) DO NOTHING
-                    """),
+                    _UPSERT_RELATIONSHIP,
                     {
                         "nid": novel_id,
                         "a": char_id,
-                        "b": other_row[0],
-                        "rel": rel_type,
+                        "b": other_id,
+                        "rel": (rel.get("type") or "").strip() or "unknown",
                         "ch": chapter_num,
-                        "ts": datetime.now(UTC),
+                        "ts": now,
                     },
                 )
 

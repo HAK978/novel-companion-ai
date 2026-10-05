@@ -52,7 +52,7 @@ For each character, provide:
 Return ONLY a valid JSON array. No explanation, no markdown, just JSON.
 
 Example format:
-[{{"name": "Sunny", "aliases": ["Sunless", "Mongrel"], "role": "fights the creature", "relationships": [{{"character": "Nephis", "type": "ally"}}]}}]
+[{{"name": "Mara Vell", "aliases": ["the Archivist"], "role": "searches the flooded library", "relationships": [{{"character": "Tobin", "type": "ally"}}]}}]
 
 Chapter {request.chapter_number} text:
 {request.chapter_text[:6000]}

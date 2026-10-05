@@ -6,9 +6,12 @@ from tasks import celery_app, ingest_chapter, ingest_from_source
 
 app = FastAPI(title="Ingestion Service")
 
+# Plain `def` handlers: enqueueing talks to Redis synchronously, and FastAPI runs sync
+# handlers in a threadpool rather than on the event loop.
+
 
 class ChapterIngest(BaseModel):
-    novel_id: int | None = None
+    novel_id: int
     number: int
     title: str | None = None
     content: str
@@ -25,7 +28,7 @@ class IngestFromSourceRequest(BaseModel):
 
 
 @app.post("/ingest")
-async def ingest(chapter: ChapterIngest):
+def ingest(chapter: ChapterIngest):
     task = ingest_chapter.delay({
         "novel_id": chapter.novel_id,
         "number": chapter.number,
@@ -42,7 +45,7 @@ async def ingest(chapter: ChapterIngest):
 
 
 @app.post("/ingest/from-source")
-async def ingest_source(request: IngestFromSourceRequest):
+def ingest_source(request: IngestFromSourceRequest):
     task = ingest_from_source.delay({
         "novel_id": request.novel_id,
         "source_type": request.source_type,
@@ -59,7 +62,7 @@ async def ingest_source(request: IngestFromSourceRequest):
 
 
 @app.get("/ingest/status/{task_id}")
-async def ingest_status(task_id: str):
+def ingest_status(task_id: str):
     result = AsyncResult(task_id, app=celery_app)
     response = {
         "task_id": task_id,
@@ -73,7 +76,7 @@ async def ingest_status(task_id: str):
 
 
 @app.get("/health")
-async def health():
+def health():
     try:
         inspect = celery_app.control.inspect()
         active = inspect.active()

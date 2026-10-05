@@ -58,3 +58,39 @@ def test_chunk_size_is_respected(chunking):
     large = chunking.chunk_text(text, chunk_size=400)
 
     assert len(small) > len(large)
+
+
+# --- HTML from sources other than the one crawl this was first built against ---
+
+
+def test_script_and_style_contents_are_dropped(chunking):
+    raw = "<style>.ad{color:red}</style><script>var tracker = load();</script><p>Elena drew her sword.</p>"
+    assert chunking.clean_html(raw) == "Elena drew her sword."
+
+
+def test_paragraphs_do_not_fuse(chunking):
+    # 'himself.</p><p>After' used to become 'himself.After'
+    assert chunking.clean_html("<p>He sighed.</p><p>After that, silence.</p>") == (
+        "He sighed. After that, silence."
+    )
+
+
+def test_line_breaks_separate_words(chunking):
+    assert chunking.clean_html("first line<br>second line<br/>third") == "first line second line third"
+
+
+def test_inline_tags_do_not_split_words(chunking):
+    assert chunking.clean_html("un<em>believ</em>able <a href='#'>link</a>") == "unbelievable link"
+
+
+def test_entities_are_decoded(chunking):
+    raw = "<p>Tom &amp; Jerry&#8217;s &quot;house&quot;</p>"
+    assert chunking.clean_html(raw) == "Tom & Jerry\u2019s \"house\""
+
+
+def test_escaped_markup_stays_text(chunking):
+    assert chunking.clean_html("<p>Type &lt;b&gt; for bold</p>") == "Type <b> for bold"
+
+
+def test_comments_are_dropped(chunking):
+    assert chunking.clean_html("<p>Before<!-- ad slot --> after</p>") == "Before after"

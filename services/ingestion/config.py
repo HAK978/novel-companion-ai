@@ -7,6 +7,4 @@ DATABASE_URL = os.environ.get(
     "postgresql://novel:novel@localhost:5432/novel_companion"
 )
 GENERATION_SERVICE_URL = os.environ.get("GENERATION_SERVICE_URL", "http://localhost:8003")
-COLLECTION_NAME = "shadow_slave"
 CHUNK_SIZE = 400
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"

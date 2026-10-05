@@ -1,7 +1,6 @@
-
 from config import DATABASE_URL
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from search import delete_collection, search_chunks
 from sqlalchemy import create_engine
 from sqlalchemy import text as sa_text
@@ -9,12 +8,16 @@ from sqlalchemy import text as sa_text
 app = FastAPI(title="Retrieval Service")
 engine = create_engine(DATABASE_URL)
 
+# Handlers are plain `def`: Chroma and SQLAlchemy calls here are synchronous, and FastAPI
+# runs sync handlers in a threadpool. Declared `async def`, each one blocked the event loop
+# for the whole call, so one slow search stalled every other request, health checks included.
+
 
 class SearchRequest(BaseModel):
     query: str
     current_chapter: int
-    n_results: int = 5
-    collection_name: str = "shadow_slave"
+    collection_name: str
+    n_results: int = Field(5, ge=1, le=20)
     min_chapter: int | None = None
 
 
@@ -36,7 +39,7 @@ class DeleteCollectionRequest(BaseModel):
 
 
 @app.post("/search", response_model=SearchResponse)
-async def search(request: SearchRequest):
+def search(request: SearchRequest):
     results = search_chunks(
         query=request.query,
         current_chapter=request.current_chapter,
@@ -44,25 +47,39 @@ async def search(request: SearchRequest):
         collection_name=request.collection_name,
         min_chapter=request.min_chapter,
     )
-    return SearchResponse(
-        query=request.query,
-        results=results,
-        count=len(results),
-    )
+    return SearchResponse(query=request.query, results=results, count=len(results))
+
+
+# `current_chapter` is required on every character endpoint. It used to default to 9999,
+# so a caller that forgot it got every character, alias and relationship: the spoiler
+# filter failed open.
 
 
 @app.get("/characters/{name}")
-async def character_recall(name: str, novel_id: int, current_chapter: int = 9999):
-    """Look up a character by name, scoped to reading progress."""
+def character_recall(name: str, novel_id: int, current_chapter: int):
+    """Look up a character by name or alias, as known at the reader's current chapter.
+
+    An alias counts only from the chapter that revealed it: matching on, or returning, a
+    later alias would confirm an identity the reader has not reached yet.
+    """
     with engine.connect() as conn:
-        # Find character by name or alias
         row = conn.execute(
             sa_text("""
-                SELECT id, name, aliases, first_appearance, description
-                FROM characters
-                WHERE novel_id = :nid
-                  AND (LOWER(name) = LOWER(:name) OR LOWER(:name) = ANY(SELECT LOWER(unnest(aliases))))
-                  AND first_appearance <= :ch
+                SELECT c.id, c.name, c.first_appearance, c.description
+                FROM characters c
+                WHERE c.novel_id = :nid
+                  AND c.first_appearance <= :ch
+                  AND (
+                      LOWER(c.name) = LOWER(:name)
+                      OR EXISTS (
+                          SELECT 1 FROM character_aliases a
+                          WHERE a.character_id = c.id
+                            AND LOWER(a.alias) = LOWER(:name)
+                            AND a.first_chapter <= :ch
+                      )
+                  )
+                -- an exact name beats an alias match
+                ORDER BY LOWER(c.name) = LOWER(:name) DESC, c.first_appearance, c.id
                 LIMIT 1
             """),
             {"nid": novel_id, "name": name, "ch": current_chapter},
@@ -73,7 +90,15 @@ async def character_recall(name: str, novel_id: int, current_chapter: int = 9999
 
         char_id = row[0]
 
-        # Get mentions up to current chapter
+        aliases = conn.execute(
+            sa_text("""
+                SELECT alias FROM character_aliases
+                WHERE character_id = :cid AND first_chapter <= :ch
+                ORDER BY first_chapter, alias
+            """),
+            {"cid": char_id, "ch": current_chapter},
+        ).scalars().all()
+
         mentions = conn.execute(
             sa_text("""
                 SELECT chapter_number, context
@@ -84,7 +109,6 @@ async def character_recall(name: str, novel_id: int, current_chapter: int = 9999
             {"cid": char_id, "ch": current_chapter},
         ).fetchall()
 
-        # Get relationships up to current chapter
         relationships = conn.execute(
             sa_text("""
                 SELECT c2.name, cr.relationship_type, cr.first_chapter
@@ -97,23 +121,19 @@ async def character_recall(name: str, novel_id: int, current_chapter: int = 9999
             {"cid": char_id, "ch": current_chapter},
         ).fetchall()
 
-    # Also search ChromaDB for passages mentioning this character
-    collection_name = f"novel_{novel_id}"
     passages = search_chunks(
         query=name,
         current_chapter=current_chapter,
         n_results=3,
-        collection_name=collection_name,
+        collection_name=f"novel_{novel_id}",
     )
 
     return {
         "name": row[1],
-        "aliases": row[2] or [],
-        "first_appearance": row[3],
-        "description": row[4],
-        "mentions": [
-            {"chapter": m[0], "context": m[1]} for m in mentions
-        ],
+        "aliases": list(aliases),
+        "first_appearance": row[2],
+        "description": row[3],
+        "mentions": [{"chapter": m[0], "context": m[1]} for m in mentions],
         "relationships": [
             {"character": r[0], "type": r[1], "since_chapter": r[2]} for r in relationships
         ],
@@ -122,15 +142,23 @@ async def character_recall(name: str, novel_id: int, current_chapter: int = 9999
 
 
 @app.get("/characters")
-async def list_characters(novel_id: int, current_chapter: int = 9999):
-    """List all characters discovered up to current reading position."""
+def list_characters(novel_id: int, current_chapter: int):
+    """List the characters the reader has met, with only the aliases revealed so far."""
     with engine.connect() as conn:
         rows = conn.execute(
             sa_text("""
-                SELECT name, aliases, first_appearance, description
-                FROM characters
-                WHERE novel_id = :nid AND first_appearance <= :ch
-                ORDER BY first_appearance
+                SELECT c.name, c.first_appearance, c.description,
+                       COALESCE(
+                           array_agg(a.alias ORDER BY a.first_chapter, a.alias)
+                               FILTER (WHERE a.alias IS NOT NULL),
+                           '{}'::text[]
+                       ) AS aliases
+                FROM characters c
+                LEFT JOIN character_aliases a
+                       ON a.character_id = c.id AND a.first_chapter <= :ch
+                WHERE c.novel_id = :nid AND c.first_appearance <= :ch
+                GROUP BY c.id
+                ORDER BY c.first_appearance, c.name
             """),
             {"nid": novel_id, "ch": current_chapter},
         ).fetchall()
@@ -138,23 +166,23 @@ async def list_characters(novel_id: int, current_chapter: int = 9999):
     return [
         {
             "name": r[0],
-            "aliases": r[1] or [],
-            "first_appearance": r[2],
-            "description": r[3],
+            "aliases": list(r[3]),
+            "first_appearance": r[1],
+            "description": r[2],
         }
         for r in rows
     ]
 
 
 @app.post("/delete-collection")
-async def delete_col(request: DeleteCollectionRequest):
+def delete_col(request: DeleteCollectionRequest):
     name = f"novel_{request.novel_id}"
     success = delete_collection(name)
     return {"collection": name, "deleted": success}
 
 
 @app.get("/health")
-async def health():
+def health():
     try:
         from search import _get_client
         client = _get_client()

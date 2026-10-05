@@ -53,8 +53,8 @@ in the prompt.
 
 ## Stack
 
-FastAPI · Celery · Redis · PostgreSQL 16 · ChromaDB · sentence-transformers
-(`all-MiniLM-L6-v2`) · vLLM serving Mistral Nemo 12B · Next.js + TypeScript + Tailwind ·
+FastAPI · Celery · Redis · PostgreSQL 16 · ChromaDB · `all-MiniLM-L6-v2` embeddings (ONNX,
+pinned in code) · vLLM serving Mistral Nemo 12B · Next.js + TypeScript + Tailwind ·
 Docker Compose
 
 ## MCP server
@@ -90,8 +90,12 @@ cp .env.example .env
 bash scripts/start_services.sh
 ```
 
-That starts PostgreSQL, Redis, and ChromaDB, waits for health, brings up vLLM, then the four
-services. For the web UI: `cd frontend && npm install && npm run dev`.
+That starts PostgreSQL, Redis, and ChromaDB, applies any pending database migrations, brings
+up vLLM, then the four services. For the web UI: `cd frontend && npm install && npm run dev`.
+
+Schema changes go through `scripts/migrate.py`, which applies `migrations/*.sql` in order and
+records each in a `schema_migrations` table, so `python scripts/migrate.py --status` always
+answers "is this database up to date?".
 
 Add a novel and ingest it:
 
@@ -139,9 +143,17 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-Unit and API tests run against stubbed vector store, database and HTTP clients, so
-they need no services running. Integration tests hit a live stack and are skipped
-unless asked for:
+The suite runs in tiers:
+
+- **Unit and API tests** use stubbed HTTP clients and need nothing running.
+- **Vector-store tests** run an embedded ChromaDB in-process, so behaviors like re-ingestion
+  are checked against the real library rather than a stub.
+- **Database tests** (`-m db`) apply the migrations to a throwaway PostgreSQL database and run
+  real SQL. They use the Compose Postgres locally and are skipped without one; CI sets
+  `REQUIRE_DB=1`, so there an unreachable database fails the run instead of skipping it.
+  The test database name must end in `_test`; anything else is refused.
+
+Integration tests hit a live stack and are skipped unless asked for:
 
 ```bash
 RUN_INTEGRATION=1 pytest -m integration
