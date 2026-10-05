@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import httpx
 from config import (
+    CORS_ORIGINS,
     DATABASE_URL,
     GENERATION_SERVICE_URL,
     INGESTION_SERVICE_URL,
@@ -15,10 +16,13 @@ from sqlalchemy import create_engine, text
 
 app = FastAPI(title="Novel Companion AI - Gateway")
 
+# Only the configured frontend origins. This allowed any site with credentials, so once
+# deployed, any page a user visited could call the API from their browser. No cookies or
+# auth are used, so credentials stay off.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -199,7 +203,7 @@ def _delete_novel_rows(novel_id: int) -> None:
                 OR character_a_id IN (SELECT id FROM characters WHERE novel_id = :id)
                 OR character_b_id IN (SELECT id FROM characters WHERE novel_id = :id)
         """), {"id": novel_id})
-        for table in ["conversations", "search_history", "reading_progress",
+        for table in ["search_history", "reading_progress",
                        "chapter_summaries", "characters", "chapters"]:
             conn.execute(text(f"DELETE FROM {table} WHERE novel_id = :id"), {"id": novel_id})
         conn.execute(text("DELETE FROM novels WHERE id = :id"), {"id": novel_id})
@@ -291,6 +295,7 @@ async def query(request: QueryRequest):
                 "query": request.query,
                 "context_chunks": context_chunks,
                 "conversation_context": request.conversation_context,
+                "current_chapter": request.current_chapter,
             },
         )
         if gen_resp.status_code != 200:
@@ -400,6 +405,7 @@ async def summarize(request: SummarizeRequest):
                     f"[Chapter {r['chapter_number']}: {r.get('chapter_title', '')}]\n{r['text']}"
                     for r in results
                 ],
+                "current_chapter": end_ch,
             },
         )
 

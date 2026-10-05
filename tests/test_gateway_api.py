@@ -345,3 +345,36 @@ def test_new_novel_is_not_created_when_its_collection_cannot_be_checked(
 def test_character_endpoints_require_reading_position(client, path):
     # it defaulted to 9999, so a forgotten parameter returned the whole graph
     assert client.get(path, params={"novel_id": 1}).status_code == 422
+
+
+def test_cors_allows_the_frontend(client):
+    response = client.options("/novels", headers={
+        "Origin": "http://localhost:3000", "Access-Control-Request-Method": "GET"})
+
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+
+def test_cors_rejects_other_sites(client):
+    # it allowed any origin, with credentials
+    response = client.options("/novels", headers={
+        "Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})
+
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_query_tells_generation_where_the_reader_is(client, wire):
+    calls, _ = wire({"/search": SEARCH_HIT, "/generate": GENERATED})
+
+    client.post("/query", json={"query": "q", "novel_id": 3, "current_chapter": 500})
+
+    generate = next(c for c in calls if "/generate" in c["url"])
+    assert generate["payload"]["current_chapter"] == 500
+
+
+def test_summary_tells_generation_its_clamped_end(client, wire):
+    calls, _ = wire({"/search": SEARCH_HIT, "/generate": GENERATED})
+
+    client.post("/summarize", json=SUMMARY_REQUEST)  # range 100-120, reader at 200
+
+    generate = next(c for c in calls if "/generate" in c["url"])
+    assert generate["payload"]["current_chapter"] == 120

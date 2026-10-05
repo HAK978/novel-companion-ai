@@ -20,7 +20,7 @@ SERVICES = ROOT / "services"
 
 # Module names services import from their own directory, which must not leak
 # between loads.
-_FLAT_NAMES = ("config", "main", "search", "chunking", "tasks", "llm_handler", "vector_store")
+_FLAT_NAMES = ("config", "main", "search", "chunking", "tasks", "llm_client", "vector_store")
 
 
 def load_module(service: str, filename: str, alias: str | None = None):

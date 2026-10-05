@@ -84,3 +84,17 @@ def test_results_carry_chapter_provenance(retrieval_search, collection):
     assert results[0]["chapter_number"] == 12
     assert results[0]["chapter_title"] == "Twelve"
     assert 0 <= results[0]["relevance_score"] <= 1
+
+
+@pytest.mark.parametrize("question,broad", [
+    ("Who is Cassie?", False),
+    ("Summarize the Forgotten Shore arc", True),
+    ("What happened at the Black Skull?", True),
+    ("Tell me about the story so far", True),
+    # substring matches that used to count as broad
+    ("Who is the archer?", False),
+    ("Search for Sunny's history", False),
+    ("What did they eat on the march?", False),
+])
+def test_only_whole_words_mark_a_question_broad(retrieval_search, question, broad):
+    assert retrieval_search.is_complex_query(question) is broad

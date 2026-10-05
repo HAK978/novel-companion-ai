@@ -33,9 +33,9 @@ start_service () {
 
 echo "[3/4] App services..."
 
-# vLLM serves the LLM (OpenAI-compatible, port 8004). Must be up BEFORE the
-# generation service starts, or generation falls back to loading its own
-# 24GB transformers copy and the two fight over GPU memory.
+# vLLM serves the model (OpenAI-compatible, port 8004). The generation service only
+# calls it over HTTP, so it can start in any order and reports "degraded" until the
+# model is reachable.
 VLLM_GPU="${VLLM_GPU:-0}"
 if ! curl -s -m 3 "http://localhost:8004/v1/models" > /dev/null 2>&1; then
   echo "  starting vllm on :8004 (GPU $VLLM_GPU, loads Mistral Nemo, takes minutes)"
@@ -50,7 +50,7 @@ if ! curl -s -m 3 "http://localhost:8004/v1/models" > /dev/null 2>&1; then
   done
   curl -s -m 3 "http://localhost:8004/v1/models" > /dev/null 2>&1 \
     && echo "  vllm ready" \
-    || echo "  WARNING: vllm not ready after 10min; generation will fall back to transformers (check $LOGS/vllm.log)"
+    || echo "  WARNING: vllm not ready after 10min; generation reports degraded until it is (check $LOGS/vllm.log)"
 else
   echo "  vllm already running on :8004"
 fi

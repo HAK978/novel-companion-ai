@@ -19,9 +19,11 @@ scoped to the reader's progress.
 - **Retrieval** (8002) — `services/retrieval/`. ChromaDB similarity search with spoiler
   filter `chapter_number <= current_chapter`, optional `min_chapter` floor, adaptive
   n_results, character lookup from PostgreSQL.
-- **Generation** (8003) — `services/generation/`. `LLMHandler` prefers vLLM (probes
-  `VLLM_URL`), falls back to in-process transformers, then OpenAI. Endpoints: /generate,
-  /extract-entities, /models, /health.
+- **Generation** (8003) — `services/generation/`. One OpenAI-compatible client
+  (`llm_client.py`) configured by `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY`; the default
+  is local vLLM on :8004. No GPU code: an unreachable endpoint is a 502 and `/health` says
+  degraded. Answers send spoiler rules as a system message plus the reader's chapter.
+  Endpoints: /generate, /extract-entities, /models, /health.
 - **MCP** — `services/mcp/server.py`, 8 tools over stdio. Spoiler rule enforced
   server-side: content tools resolve stored progress and clamp requested chapters to it.
 - **Frontend** (3000) — `frontend/`, Next.js + TypeScript + Tailwind.
@@ -32,7 +34,7 @@ scoped to the reader's progress.
 
 PostgreSQL `novel_companion`. Migrations in `migrations/`. Tables: novels, chapters,
 characters (unique on (novel_id, name)), character_aliases, character_relationships, character_mentions,
-chapter_summaries, reading_progress, search_history, conversations. All scoped by novel_id.
+chapter_summaries, reading_progress, search_history. All scoped by novel_id.
 Each novel gets its own ChromaDB collection (`novel_{id}`).
 
 ## Operations
@@ -70,13 +72,18 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
 - Chroma volume mounts at `/data`, ulimit nofile 65536, healthcheck uses bash /dev/tcp.
 - Range queries (`/summarize`, `/catch-me-up`) pass `min_chapter`; context chunks are labelled
   `[Chapter N: title]`. Summary cache is keyed by (novel_id, start, end).
-- Do not restart the generation service while vLLM is down: its transformers fallback loads
-  a 24 GB model onto a shared GPU (removal planned).
+- **The prompt is part of the spoiler defense.** A model may know a famous book: at chapter
+  5 of the Hound it named the culprit from memory 7/20 times until the rules went into the
+  system message (0/40). Keep `system_prompt()` in `llm_client.py`.
+- **EPUB chapters come from the spine plus the table of contents**, front and back matter
+  dropped by title, Project Gutenberg boilerplate clipped at its START/END markers.
+- Never `pgrep -f`/`pkill -f` a pattern containing literal text from your own command (it
+  matches the shell running it and kills it, exit 144). Use a bracket: `800[3]`, `vll[m]`.
 - In `tasks.py`, SQLAlchemy `text` is imported as `sa_text` to avoid shadowing.
 
 ## Roadmap
 
-Single OpenAI-compatible LLM client, containerized services, evaluation harness (RAGAS
+Containerized services, evaluation harness (RAGAS
 metrics + deterministic spoiler-leakage check), populated character graph, hybrid search with
 reranking, SSE streaming, tracing via Langfuse/OpenTelemetry.
 

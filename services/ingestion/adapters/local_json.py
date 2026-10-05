@@ -3,7 +3,7 @@ import logging
 import re
 from pathlib import Path
 
-from adapters.base import BaseAdapter
+from adapters.base import BaseAdapter, in_reading_order
 
 log = logging.getLogger(__name__)
 
@@ -16,22 +16,6 @@ def _natural_key(path: Path, root: Path) -> list:
     """
     relative = path.relative_to(root).as_posix().lower()
     return [int(tok) if tok.isdigit() else tok for tok in re.split(r"(\d+)", relative)]
-
-
-def _in_reading_order(chapters: list[dict], max_chapters: int | None) -> list[dict]:
-    """Sort by chapter number, reject duplicates, then take the first `max_chapters`."""
-    chapters.sort(key=lambda ch: ch["number"])
-    seen: dict[int, str] = {}
-    for ch in chapters:
-        if ch["number"] in seen:
-            raise ValueError(
-                f"two chapters claim number {ch['number']} ({seen[ch['number']]!r} and "
-                f"{ch['title']!r}). Chapter numbers define reading order for the spoiler "
-                f"filter, so they must be unique; a source that restarts numbering each "
-                f"volume needs renumbering before ingestion."
-            )
-        seen[ch["number"]] = ch["title"]
-    return chapters[:max_chapters] if max_chapters else chapters
 
 
 class LocalJsonAdapter(BaseAdapter):
@@ -73,7 +57,7 @@ class LocalJsonAdapter(BaseAdapter):
                 "content": content,
                 "volume": data.get("volume", 1),
             })
-        return _in_reading_order(chapters, max_chapters)
+        return in_reading_order(chapters, max_chapters)
 
     def _load_combined_json(self, max_chapters: int | None = None) -> list[dict]:
         """Load from a single JSON file containing all chapters."""
@@ -97,4 +81,4 @@ class LocalJsonAdapter(BaseAdapter):
                 "content": ch.get("body") or ch.get("content") or "",
                 "volume": ch.get("volume", 1),
             })
-        return _in_reading_order(chapters, max_chapters)
+        return in_reading_order(chapters, max_chapters)

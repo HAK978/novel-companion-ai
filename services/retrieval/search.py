@@ -1,12 +1,17 @@
+import re
 from typing import Any
 
 import chromadb
 from config import CHROMADB_URL
 from vector_store import open_collection
 
-COMPLEX_KEYWORDS = [
-    "summarize", "explain", "arc", "story", "what happened", "tell me about"
-]
+# Broad questions fetch more passages. Matched as whole words: as substrings, "arc" hit
+# "search", "archer" and "march", and "story" hit "history". Whether the extra passages
+# help at all is unmeasured; the evaluation harness should decide if this stays.
+_COMPLEX = re.compile(
+    r"\b(?:summari[sz]e|explain|arcs?|stor(?:y|ies)|what happened|tell me about)\b",
+    re.IGNORECASE,
+)
 
 
 # One client per process; per-request clients leak server-side connections
@@ -31,7 +36,7 @@ def get_collection(collection_name: str):
 
 
 def is_complex_query(query: str) -> bool:
-    return any(kw in query.lower() for kw in COMPLEX_KEYWORDS)
+    return bool(_COMPLEX.search(query))
 
 
 def search_chunks(

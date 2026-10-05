@@ -18,5 +18,5 @@ ignore = [
 "tests/*" = ["B008"]
 # Prompt templates are content, not code: wrapping a line would change the text
 # the model actually receives.
-"services/generation/llm_handler.py" = ["E501"]
+"services/generation/llm_client.py" = ["E501"]
 "services/generation/main.py" = ["E501"]

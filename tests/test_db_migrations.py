@@ -15,7 +15,7 @@ pytestmark = pytest.mark.db
 MIGRATIONS = sorted((Path(__file__).resolve().parent.parent / "migrations").glob("*.sql"))
 NOVEL_SCOPED_TABLES = (
     "chapters", "characters", "character_mentions", "character_relationships",
-    "chapter_summaries", "reading_progress", "search_history", "conversations",
+    "chapter_summaries", "reading_progress", "search_history",
 )
 
 
@@ -136,3 +136,8 @@ def test_baseline_records_history_without_changing_the_schema(scratch):
         aliases_table = conn.execute(text("SELECT to_regclass('character_aliases')")).scalar()
     assert sorted(recorded) == [m.name for m in MIGRATIONS[:2]]
     assert aliases_table is None  # 004 not applied
+
+
+def test_unused_conversations_table_is_gone(db_engine):
+    with db_engine.connect() as conn:
+        assert conn.execute(text("SELECT to_regclass('conversations')")).scalar() is None

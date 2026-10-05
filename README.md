@@ -16,9 +16,14 @@ what happened a few hundred chapters back, but wikis and summaries are written f
 who finished the book, so looking anything up means getting spoiled.
 
 Here, every chunk of text is indexed with its chapter number, and retrieval filters on
-`chapter_number <= current_chapter` before searching. The model never sees unread content,
-so answers can't spoil what's ahead. The filter is applied server-side rather than asked for
-in the prompt.
+`chapter_number <= current_chapter` before searching, so the model never sees unread text.
+That filter is enforced server-side, not left to the prompt.
+
+Retrieval alone isn't enough for a well-known book, though: a model may already know how it
+ends. Asked at chapter 5 of *The Hound of the Baskervilles* who "turns out to be the villain",
+the model named the culprit from memory in 7 of 20 answers. The reader's position and a
+no-outside-knowledge rule now go to the model as a system message, which brought that to
+0 of 40 on the same questions.
 
 ## Architecture
 
@@ -82,8 +87,8 @@ claude mcp add novel-companion --scope user \
 
 ## Running it
 
-Needs Docker, Python 3.10+, and a CUDA GPU for local inference (or an `OPENAI_API_KEY` to
-use a hosted model instead).
+Needs Docker, Python 3.10+, and a CUDA GPU for local inference, or any hosted
+OpenAI-compatible endpoint instead (set `LLM_BASE_URL`, `LLM_MODEL` and `LLM_API_KEY`).
 
 ```bash
 cp .env.example .env
@@ -121,7 +126,6 @@ curl -X POST localhost:8000/query -H 'Content-Type: application/json' \
 
 ```
 services/       gateway, ingestion, retrieval, generation, mcp
-shared/         Pydantic schemas and database helpers
 migrations/     PostgreSQL schema
 scripts/        startup and seeding
 frontend/       Next.js app
@@ -130,8 +134,10 @@ training/       dataset generation for fine-tuning
 
 ## Status
 
-Working: ingestion at scale (tested on a 3,000-chapter novel), question answering,
-summarization, character recall, progress tracking, MCP server, web UI.
+Working: ingestion at scale (tested on a 3,000-chapter web serial, and on a 15-chapter EPUB
+with chapters three times as long), question answering, summarization, character recall,
+progress tracking, MCP server, web UI. Novels are fully isolated: queries, summaries,
+progress and deletion for one never touch another.
 
 Next: an evaluation harness, request tracing, streaming responses, hybrid search with
 reranking, tests and CI, and fine-tuning on a distilled dataset.
