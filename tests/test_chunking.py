@@ -94,3 +94,31 @@ def test_escaped_markup_stays_text(chunking):
 
 def test_comments_are_dropped(chunking):
     assert chunking.clean_html("<p>Before<!-- ad slot --> after</p>") == "Before after"
+
+
+@pytest.mark.parametrize("pieces", [2, 3])
+def test_windows_rebuild_their_chunk_when_the_last_is_short(chunking, pieces):
+    # a tail under 50 characters joins the window before it, without losing or repeating text
+    full = " ".join(f"w{i}." for i in range(10 * (pieces - 1)))
+    chunk = f"{full} tail."
+    windows = chunking.split_windows(chunk, 10)
+
+    assert len(windows) == pieces - 1
+    assert " ".join(windows) == chunk
+
+
+def test_windows_rebuild_their_chunk(chunking):
+    chunk = " ".join(f"Sentence {i} ends here." for i in range(120))
+    windows = chunking.split_windows(chunk, 170)
+
+    assert len(windows) > 1
+    assert " ".join(windows) == chunk
+    assert all(len(w.split()) <= 170 for w in windows)
+
+
+def test_windows_never_lose_or_repeat_text(chunking):
+    # every chunk length up to two full chunks, so every kind of tail comes up
+    words = [f"w{i}" + ("." if i % 7 == 3 else "") for i in range(800)]
+    for n in range(1, 801):
+        chunk = " ".join(words[:n])
+        assert " ".join(chunking.split_windows(chunk, 170)) == chunk, n

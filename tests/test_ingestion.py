@@ -82,8 +82,12 @@ class FakeCollection:
         self.added.append({"documents": documents, "metadatas": metadatas, "ids": ids,
                            "embeddings": embeddings})
 
-    def delete(self, where):
-        self.deleted.append(where)
+    def get(self, where, include):
+        return {"ids": [i for u in self.added for i, m in zip(u["ids"], u["metadatas"], strict=True)
+                        if m["chapter_number"] == where["chapter_number"]]}
+
+    def delete(self, ids):
+        self.deleted.append(ids)
 
 
 class FakeConnection:
@@ -134,6 +138,25 @@ def test_chapter_is_chunked_and_indexed(ingestion_tasks, pipeline):
     assert result["status"] == "complete"
     assert result["chunks_created"] > 0
     assert collection.added
+
+
+def test_chunks_are_stored_as_windows_the_model_reads_whole(ingestion_tasks, pipeline):
+    collection, _ = pipeline
+    chapter = {**CHAPTER, "content": "<p>" + "The shadow moved through the ruined street. " * 150
+               + "</p>"}
+
+    result = ingestion_tasks._process_chapter(chapter)
+
+    metas = collection.added[0]["metadatas"]
+    docs = collection.added[0]["documents"]
+    assert result["windows"] > result["chunks_created"] > 1
+    assert all(len(d.split()) <= ingestion_tasks.WINDOW_SIZE for d in docs)
+    # a chunk's windows, in order, are the chunk
+    _, chunks = ingestion_tasks._chapter_chunks(chapter["content"])
+    for i, chunk in enumerate(chunks):
+        windows = sorted((m["window_index"], d) for m, d in zip(metas, docs, strict=True)
+                         if m["chunk_index"] == i)
+        assert " ".join(d for _, d in windows) == chunk
 
 
 def test_every_chunk_carries_its_chapter_number(ingestion_tasks, pipeline):

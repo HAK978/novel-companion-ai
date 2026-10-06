@@ -28,32 +28,38 @@ def clean_html(html_content: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+# A word that ends a sentence, closing quotes or brackets included: 'end.', 'said."', 'why?)'
+_ENDS_SENTENCE = re.compile(r"[.!?][\"'\u201d\u2019)\]]*$")
+
+
+def _split(text: str, size: int) -> list[str]:
+    """Pieces of about `size` words, each cut after the last word ending a sentence in its
+    final 30% when there is one. Pieces end at whole words, so joined with spaces they give
+    the text back. (Cutting at the last "." character used to split 'said."' in two.)"""
+    pieces, current = [], []
+    for word in text.split():
+        current.append(word)
+        if len(current) >= size:
+            cut = next((i for i in range(len(current), int(len(current) * 0.7), -1)
+                        if _ENDS_SENTENCE.search(current[i - 1])), len(current))
+            pieces.append(" ".join(current[:cut]))
+            current = current[cut:]
+    if current:
+        pieces.append(" ".join(current))
+    return pieces
+
+
 def chunk_text(text: str, chunk_size: int = 400) -> list[str]:
     """Split text into chunks, preserving sentence boundaries."""
-    words = text.split()
-    chunks = []
-    current_chunk = []
+    return [c for c in _split(text, chunk_size) if len(c.strip()) >= 50]
 
-    for word in words:
-        current_chunk.append(word)
 
-        if len(current_chunk) >= chunk_size:
-            chunk_text = " ".join(current_chunk)
-            # Try to break at a sentence boundary
-            last_end = max(
-                chunk_text.rfind("."),
-                chunk_text.rfind("!"),
-                chunk_text.rfind("?"),
-            )
-
-            if last_end > len(chunk_text) * 0.7:
-                chunks.append(chunk_text[: last_end + 1].strip())
-                current_chunk = chunk_text[last_end + 1 :].strip().split()
-            else:
-                chunks.append(chunk_text)
-                current_chunk = []
-
-    if current_chunk:
-        chunks.append(" ".join(current_chunk))
-
-    return [c for c in chunks if len(c.strip()) >= 50]
+def split_windows(chunk: str, size: int) -> list[str]:
+    """Split a chunk into windows of about `size` words for the embedding model, which reads
+    only the start of a long text. Nothing is dropped: a short tail joins the window before
+    it, so the windows joined with spaces give the chunk back."""
+    windows = _split(chunk, size)
+    if len(windows) > 1 and len(windows[-1]) < 50:
+        tail = windows.pop()  # popped first: popping inside the assignment shifted its target
+        windows[-1] = f"{windows[-1]} {tail}"
+    return windows

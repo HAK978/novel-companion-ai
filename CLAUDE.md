@@ -13,17 +13,20 @@ scoped to the reader's progress.
   /health (aggregated).
 - **Ingestion** (8001) — `services/ingestion/`. Celery tasks (`tasks.py`, core logic in
   `_process_chapter()`): clean HTML → chunk (~400 words, sentence-boundary, `chunking.py`)
-  → embed (all-MiniLM-L6-v2, Chroma's ONNX build; bulk ingests embed 32 chapters per call in
-  `_ingest_chapters()`) → store in ChromaDB → chapter record in
+  → split each chunk into windows of ≤170 words (`split_windows`, lossless) → embed the windows
+  (all-MiniLM-L6-v2, Chroma's ONNX build; bulk ingests embed 32 chapters per call in
+  `_ingest_chapters()`) → store the windows in ChromaDB (`chunk_index`, `window_index`) →
+  chapter record in
   PostgreSQL → optional entity extraction via generation service. Source adapters in
   `adapters/` (local_json handles nested dirs via rglob, epub). Chapter summaries: the
   `summary-worker` (Celery queue `summaries`) writes one per chapter through generation's
   `/chapter-summary`, up to the furthest reader + `SUMMARY_LOOKAHEAD` (100), newest first back
   from the reader, then ahead. Scheduled as soon as an ingest has indexed the reader's chapter,
   again when it ends, and on every progress update (`POST /summaries`, `GET /summaries/{novel_id}`).
-- **Retrieval** (8002) — `services/retrieval/`. ChromaDB similarity search with spoiler
-  filter `chapter_number <= current_chapter`, optional `min_chapter` floor, adaptive
-  n_results, character lookup from PostgreSQL.
+- **Retrieval** (8002) — `services/retrieval/`. ChromaDB similarity search over windows that
+  returns the whole chunks they belong to, each once, ranked by its best window
+  (`search.py`); spoiler filter `chapter_number <= current_chapter`, optional `min_chapter`
+  floor, adaptive n_results, character lookup from PostgreSQL.
 - **Generation** (8003) — `services/generation/`. One OpenAI-compatible client
   (`llm_client.py`) configured by `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY`; the default
   is the compose `vllm` service (`http://vllm:8000/v1`, host port 8004). No GPU code: an
@@ -57,10 +60,10 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   in flight (`SUMMARY_PARALLEL`; 8 was ~2.4 s). After changing the name check:
   `docker compose exec ingestion python -c "from tasks import recheck_summary_flags as r; print(r(N))"`.
 - **Bulk ingest:** POST /ingest/from-source with `extract_entities: false` (default) and a
-  `source_path` under `/novels` (host `NOVEL_DATA_DIR`). ~0.12 s/chapter (300 chapters in 35 s:
-  embedding ~80 ms, Chroma writes ~45 ms; one chapter per embedding call took 52.6 s), so a
-  3,000-chapter book is ~6 min. Chapters are searchable as they land; the task's progress meta
-  has `searchable_up_to`, which the web UI shows. Extraction ~20s/chapter.
+  `source_path` under `/novels` (host `NOVEL_DATA_DIR`). ~0.22 s/chapter: Shadow Slave's 3,026
+  chapters in 11 min (whole chunks before windows took ~0.12 s; embedding one chapter per call,
+  ~0.18 s). Chapters are searchable as they land; the task's progress meta has
+  `searchable_up_to`, which the web UI shows. Extraction ~20s/chapter.
 - **End-to-end tests:** run in a separate project so the dev data stays out:
   `NOVEL_DATA_DIR=<dir> docker compose -p novel-e2e -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait`,
   then `RUN_INTEGRATION=1 NOVEL_DATA_DIR=<dir> pytest -m integration` (stop the dev stack
@@ -127,9 +130,9 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   are tracked in Redis (`summaries:pending:<novel>`) so repeated scheduling adds no duplicates.
 - Summaries record names their chapter (title included) never mentions (`unverified_names`):
   possible additions from the model's memory of the book. Heading words ("Chapter 12 Summary
-  (Part 1 of 2)") are ignored. On Shadow Slave 1-1391 it flags 35 of 1,390: one real leak
+  (Part 1 of 2)") are ignored. On Shadow Slave 1-1391 it flags 33 of 1,390: one real leak
   (chapter 33's summary used "Underworld", first in the book at chapter 250), four words the
-  book never uses ("Cassandra", "Fawkes", "Sightless", "Transcender"), and 30 harmless (names
+  book never uses ("Cassandra", "Fawkes", "Sightless", "Transcender"), and 28 harmless (names
   from earlier chapters). The Hound: 6 of 15, including an invented name (chapter 11 calls Mr.
   Frankland "Captain John Sebastian Morland Frankland") and the book's title in chapter 1's
   summary. Checking against the book up to the chapter instead (a per-novel index of where each
@@ -141,14 +144,18 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   character; the Hound has the same errors. Use them for recaps and for finding where something
   happened, not as the only source for a specific answer. Long chapters are summarized in
   sections of at most 2,500 words: in one pass, 3,500-word chapters lost their endings.
-- **Chunks are longer than the embedding model reads.** `CHUNK_SIZE` is 400 words (~500
-  tokens); all-MiniLM-L6-v2 reads the first 256 tokens and ignores the rest. Measured on Shadow
-  Slave 1-64: 89% of chunks are cut, so vector search sees ~54% of the text (replacing a chunk's
-  tail leaves its vector unchanged). The model answering still gets whole chunks. Changing it
-  means re-ingesting; measure retrieval with the eval set first.
-- **Shadow Slave's index predates the paragraph-spacing fix in `clean_html`**: its chunks glue
-  paragraphs ("himself.After", ~6 per chunk) and each chapter's title to its first word
-  ("Turf WarCaster"). The Hound's index is clean. Re-ingest Shadow Slave to fix (CPU only).
+- **Chunks are searched through windows.** all-MiniLM-L6-v2 reads the first 256 tokens of a
+  text and ignores the rest: 400-word chunks (~500 tokens) left ~46% of the book invisible to
+  search. Each chunk is stored as windows of ≤170 words (the most that always fit, measured);
+  a search ranks windows and returns whole chunks. Measured (eval/experiments/chunk_windows.py):
+  the answer was retrieved for 17 of 25 Hound fact questions instead of 12, and 140 of 262
+  Shadow Slave questions instead of 110; hand-graded answers 16.8 → 20.5 of 30, fewer wrong.
+  170-word chunks returned as 12 passages retrieved as well but answered worse (fragments).
+  Live after re-ingesting: Hound 16 of 25, Shadow Slave 140 of 262. `WINDOW_SIZE` must stay
+  within 256 tokens; changing either size means re-ingesting. Collections stored before
+  windows still work (each chunk counts as one window). `split_windows` must lose nothing
+  (`_chapter_text` and search rebuild chunks from windows): a merge bug once dropped text
+  only when a chunk's last window was under 50 characters, so test every length.
 - Never pipe `scripts/start_vllm.sh` into `head` or similar: the closed pipe kills the script
   before `docker compose up` runs, and the model silently never starts.
 - **Evaluation scores in code, not with an LLM judge.** Mistral Nemo graded "not revealed" as

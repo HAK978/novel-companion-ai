@@ -7,7 +7,7 @@ import httpx
 import redis
 from adapters import get_adapter
 from celery import Celery
-from chunking import chunk_text, clean_html
+from chunking import chunk_text, clean_html, split_windows
 from config import (
     CHROMADB_URL,
     CHUNK_SIZE,
@@ -17,6 +17,7 @@ from config import (
     SUMMARY_BATCH,
     SUMMARY_LOOKAHEAD,
     SUMMARY_PARALLEL,
+    WINDOW_SIZE,
 )
 from sqlalchemy import create_engine
 from sqlalchemy import text as sa_text
@@ -54,31 +55,32 @@ def _get_collection(collection_name: str):
     return _collections[collection_name]
 
 
-def _replace_chapter_chunks(collection_name, chapter_num, ids, chunks, metadatas,
+def _replace_chapter_chunks(collection_name, chapter_num, ids, documents, metadatas,
                             embeddings=None):
-    """Make the stored chunks for one chapter exactly `chunks`.
+    """Make the stored records for one chapter exactly these.
 
     `add()` silently skips ids that already exist, so re-ingesting a chapter used to keep its
     old text, plus any surplus old chunks when the new chunking yielded fewer, while the task
-    reported success. Upserting replaces existing ids; pruning removes the surplus. In that
-    order a crash midway leaves extra chunks at worst, never a chapter with none.
+    reported success. Upserting replaces existing ids; pruning removes whatever else the
+    chapter had (a longer earlier version, or whole chunks stored before windows). In that
+    order a crash midway leaves extra records at worst, never a chapter with none.
     """
     batch_size = 100
 
     def write(collection):
-        for start in range(0, len(chunks), batch_size):
+        for start in range(0, len(documents), batch_size):
             end = start + batch_size
             collection.upsert(
-                documents=chunks[start:end],
+                documents=documents[start:end],
                 metadatas=metadatas[start:end],
                 ids=ids[start:end],
                 # computed for many chapters at once; without them, the collection embeds
                 **({"embeddings": embeddings[start:end]} if embeddings is not None else {}),
             )
-        collection.delete(where={"$and": [
-            {"chapter_number": chapter_num},
-            {"chunk_index": {"$gte": len(chunks)}},
-        ]})
+        stored = collection.get(where={"chapter_number": chapter_num}, include=[])["ids"]
+        stale = sorted(set(stored) - set(ids))
+        if stale:
+            collection.delete(ids=stale)
 
     try:
         write(_get_collection(collection_name))
@@ -95,9 +97,17 @@ def _chapter_chunks(content: str) -> tuple[str, list[str]]:
     return text, chunk_text(text, CHUNK_SIZE)
 
 
-# Chunks are embedded EMBED_GROUP chapters at a time: one chapter at a time, 300 chapters took
-# 52.6 s to ingest; 32 at a time, 35.4 s. The vectors are identical either way: the model pads
-# every chunk to the same length.
+def _windows(chunks: list[str]) -> list[tuple[int, int, str]]:
+    """(chunk index, window index, text) for each window of each chunk. Windows are what is
+    embedded and searched: the model reads only the first 256 tokens of a text, about half of
+    a chunk. A search returns the chunks its best windows belong to (retrieval's search.py)."""
+    return [(i, j, window) for i, chunk in enumerate(chunks)
+            for j, window in enumerate(split_windows(chunk, WINDOW_SIZE))]
+
+
+# Windows are embedded EMBED_GROUP chapters at a time: one chapter at a time, 300 chapters took
+# 52.6 s to ingest; 32 at a time, 35.4 s (whole chunks, before windows). The vectors are
+# identical either way: the model pads every text to the same length.
 EMBED_GROUP = 32
 _embedder = None
 
@@ -124,8 +134,8 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False,
     generation service (~15-20s/chapter). Off by default; recall queries
     answer character questions from RAG without pre-extracted entities.
 
-    chunked, embeddings: the cleaned text and chunks, and their vectors, when the caller
-    already has them (see _ingest_chapters); otherwise computed here.
+    chunked, embeddings: the cleaned text and chunks, and the vectors of their windows, when
+    the caller already has them (see _ingest_chapters); otherwise computed here.
     """
     novel_id = chapter_data.get("novel_id")
     if not novel_id:
@@ -146,20 +156,22 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False,
         _replace_chapter_chunks(collection_name, chapter_num, [], [], [])
         return {"status": "skipped", "chapter": chapter_num, "reason": "no content"}
 
-    # 3. Store in ChromaDB
-
-    ids = [f"ch_{chapter_num:04d}_chunk_{i:03d}" for i in range(len(chunks))]
+    # 3. Store in ChromaDB, each chunk as the windows the embedding model reads whole
+    windows = _windows(chunks)
+    ids = [f"ch_{chapter_num:04d}_chunk_{i:03d}_w{j}" for i, j, _ in windows]
     metadatas = [
         {
             "chapter_number": chapter_num,
             "chapter_title": title,
             "chunk_index": i,
+            "window_index": j,
             "volume": volume,
         }
-        for i in range(len(chunks))
+        for i, j, _ in windows
     ]
 
-    _replace_chapter_chunks(collection_name, chapter_num, ids, chunks, metadatas, embeddings)
+    _replace_chapter_chunks(collection_name, chapter_num, ids, [w for _, _, w in windows],
+                            metadatas, embeddings)
 
     # 4. Update PostgreSQL
     with engine.connect() as conn:
@@ -214,6 +226,7 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False,
         "novel_id": novel_id,
         "chapter": chapter_num,
         "chunks_created": len(chunks),
+        "windows": len(windows),
         "word_count": word_count,
         "entities_extracted": entities_extracted,
     }
@@ -368,7 +381,7 @@ def ingest_from_source(self, source_data: dict):
 
 def _ingest_chapters(novel_id: int, chapters: list[dict], extract_entities: bool = False,
                      reader_chapter: int = 0, report=None) -> list[dict]:
-    """Index chapters in reading order, EMBED_GROUP chapters' chunks per embedding call. Each
+    """Index chapters in reading order, EMBED_GROUP chapters' windows per embedding call. Each
     chapter is searchable as soon as it is stored, so a reader can ask about the chapters they
     have read long before the rest of the book is in. Summaries start then too, rather than
     after the whole book."""
@@ -376,11 +389,12 @@ def _ingest_chapters(novel_id: int, chapters: list[dict], extract_entities: bool
     for start in range(0, len(chapters), EMBED_GROUP):
         group = chapters[start:start + EMBED_GROUP]
         prepared = [_chapter_chunks(ch["content"]) for ch in group]
-        vectors = iter(_embed([c for _, chunks in prepared for c in chunks]))
-        for chapter, (text, chunks) in zip(group, prepared, strict=True):
+        windows = [_windows(chunks) for _, chunks in prepared]
+        vectors = iter(_embed([w for ws in windows for _, _, w in ws]))
+        for chapter, (text, chunks), ws in zip(group, prepared, windows, strict=True):
             chapter["novel_id"] = novel_id
             results.append(_process_chapter(chapter, extract_entities, chunked=(text, chunks),
-                                            embeddings=[next(vectors) for _ in chunks]))
+                                            embeddings=[next(vectors) for _ in ws]))
         searchable_up_to = group[-1]["number"]
         if report:
             report({"novel_id": novel_id, "total_chapters": len(chapters),
@@ -486,12 +500,13 @@ def summary_status(novel_id: int) -> dict:
 
 
 def _chapter_text(novel_id: int, chapter_number: int) -> tuple[str, str]:
-    """A chapter's title and text, put back together from its indexed chunks (they do not
-    overlap)."""
+    """A chapter's title and text, put back together from its indexed windows (they do not
+    overlap). Chunks stored before windows count as one window each."""
     got = _get_collection(f"novel_{novel_id}").get(
         where={"chapter_number": chapter_number}, include=["documents", "metadatas"])
     pieces = sorted(zip(got["metadatas"], got["documents"], strict=True),
-                    key=lambda piece: piece[0].get("chunk_index", 0))
+                    key=lambda piece: (piece[0].get("chunk_index", 0),
+                                       piece[0].get("window_index", 0)))
     title = pieces[0][0].get("chapter_title", "") if pieces else ""
     return title, " ".join(document for _, document in pieces)
 

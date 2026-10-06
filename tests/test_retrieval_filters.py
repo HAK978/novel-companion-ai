@@ -14,6 +14,8 @@ def search(module, **kwargs):
 
 
 class FakeCollection:
+    """Every window a query asks for, each from a different chunk of chapter 12."""
+
     def __init__(self, count=100):
         self._count = count
         self.last_query = None
@@ -23,11 +25,18 @@ class FakeCollection:
 
     def query(self, **kwargs):
         self.last_query = kwargs
+        n = kwargs["n_results"]
         return {
-            "documents": [["passage text"]],
-            "metadatas": [[{"chapter_number": 12, "chapter_title": "Twelve"}]],
-            "distances": [[0.25]],
+            "metadatas": [[{"chapter_number": 12, "chapter_title": "Twelve", "chunk_index": i}
+                           for i in range(n)]],
+            "distances": [[0.25] * n],
         }
+
+    def get(self, where, include):
+        keys = [c["$and"] for c in where.get("$or", [where])]
+        return {"documents": ["passage text"] * len(keys),
+                "metadatas": [{"chapter_number": k[0]["chapter_number"],
+                               "chunk_index": k[1]["chunk_index"]} for k in keys]}
 
 
 @pytest.fixture
@@ -63,19 +72,18 @@ def test_empty_collection_returns_no_results(retrieval_search, monkeypatch):
 
 
 def test_complex_queries_retrieve_more_context(retrieval_search, collection):
-    search(retrieval_search, query="who is Sunny", current_chapter=500, n_results=5)
-    simple = collection.last_query["n_results"]
+    simple = search(retrieval_search, query="who is Sunny", current_chapter=500, n_results=5)
+    complex_ = search(retrieval_search, query="summarize the arc", current_chapter=500,
+                      n_results=5)
 
-    search(retrieval_search, query="summarize the arc", current_chapter=500, n_results=5)
-    complex_ = collection.last_query["n_results"]
-
-    assert complex_ > simple
+    assert len(complex_) > len(simple)
 
 
 def test_adaptive_retrieval_is_capped(retrieval_search, collection):
-    search(retrieval_search, query="explain what happened", current_chapter=500, n_results=8)
+    results = search(retrieval_search, query="explain what happened", current_chapter=500,
+                     n_results=8)
 
-    assert collection.last_query["n_results"] <= 10
+    assert len(results) <= 10
 
 
 def test_results_carry_chapter_provenance(retrieval_search, collection):

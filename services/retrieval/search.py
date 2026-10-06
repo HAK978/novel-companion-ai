@@ -14,6 +14,15 @@ _COMPLEX = re.compile(
 )
 
 
+# Chunks are indexed as windows the embedding model reads whole: it ignores text past 256
+# tokens, about half of a 400-word chunk. A search ranks windows and returns the chunks they
+# belong to, best first, each once. Measured (eval/experiments/chunk_windows.py), the answer
+# was retrieved for 17 of 25 Hound fact questions instead of 12, and for 140 of 262 Shadow
+# Slave questions instead of 110. Windows fetched per chunk wanted: several from one chunk
+# must still leave enough distinct chunks.
+WINDOWS_PER_CHUNK = 8
+
+
 # One client per process; per-request clients leak server-side connections
 # (ChromaDB has a 1024-FD ulimit by default).
 _client = None
@@ -69,28 +78,44 @@ def search_chunks(
 
     results = collection.query(
         query_texts=[query],
-        n_results=n_results,
+        n_results=n_results * WINDOWS_PER_CHUNK,
         where=where_filter,
-        include=["documents", "metadatas", "distances"],
+        include=["metadatas", "distances"],
     )
 
-    formatted = []
-    if results and results["documents"][0]:
-        for doc, metadata, distance in zip(
-            results["documents"][0],
-            results["metadatas"][0],
-            results["distances"][0],
-            strict=False,
-        ):
-            formatted.append({
-                "text": doc,
-                "chapter_number": metadata["chapter_number"],
-                "chapter_title": metadata.get("chapter_title", ""),
-                # cosine distance under the pinned model, so this is cosine similarity
-                "relevance_score": round(1 - distance, 4),
-            })
+    # each chunk once, ranked by its best window
+    best: dict[tuple[int, int], tuple[str, float]] = {}
+    for metadata, distance in zip(results["metadatas"][0], results["distances"][0], strict=True):
+        key = (metadata["chapter_number"], metadata.get("chunk_index", 0))
+        if key not in best:
+            best[key] = (metadata.get("chapter_title", ""), distance)
+            if len(best) == n_results:
+                break
 
-    return formatted
+    texts = _chunk_texts(collection, list(best))
+    return [{
+        "text": texts.get(key, ""),
+        "chapter_number": key[0],
+        "chapter_title": title,
+        # cosine distance under the pinned model, so this is cosine similarity
+        "relevance_score": round(1 - distance, 4),
+    } for key, (title, distance) in best.items()]
+
+
+def _chunk_texts(collection, keys: list[tuple[int, int]]) -> dict[tuple[int, int], str]:
+    """Whole chunks, put back together from their windows. A chunk stored before windows is
+    its own single window."""
+    if not keys:
+        return {}
+    conditions = [{"$and": [{"chapter_number": chapter}, {"chunk_index": chunk}]}
+                  for chapter, chunk in keys]
+    got = collection.get(where=conditions[0] if len(conditions) == 1 else {"$or": conditions},
+                         include=["documents", "metadatas"])
+    windows: dict[tuple[int, int], list[tuple[int, str]]] = {}
+    for document, metadata in zip(got["documents"], got["metadatas"], strict=True):
+        key = (metadata["chapter_number"], metadata.get("chunk_index", 0))
+        windows.setdefault(key, []).append((metadata.get("window_index", 0), document))
+    return {key: " ".join(text for _, text in sorted(parts)) for key, parts in windows.items()}
 
 
 def delete_collection(collection_name: str):

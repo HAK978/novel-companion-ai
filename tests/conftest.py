@@ -94,6 +94,10 @@ class FakeEmbedding:
     def __call__(self, input):
         return [[float(len(d) % 97), float(sum(map(ord, d)) % 89), 1.0] for d in input]
 
+    def embed_query(self, input):
+        # what Chroma calls to embed a question
+        return self(input)
+
     @staticmethod
     def name():
         return "fake_for_tests"

@@ -53,9 +53,12 @@ no-outside-knowledge rule now go to the model as a system message, which brought
 
 - **Gateway** — entry point; orchestrates retrieval → generation, manages novels and progress
 - **Ingestion** — Celery workers: clean HTML → chunk → embed → store; pluggable source adapters.
+  Each chunk is embedded as smaller windows, since the embedding model reads only the first 256
+  tokens of a text.
   A background worker also writes a short summary of each chapter, for questions that span
   many chapters.
-- **Retrieval** — vector search with chapter filtering and range scoping
+- **Retrieval** — vector search with chapter filtering and range scoping: windows are ranked,
+  and whole chunks are returned
 - **Generation** — prompts and calls to the language model: any OpenAI-compatible endpoint,
   vLLM by default
 
@@ -138,7 +141,8 @@ Adapters handle directories of JSON chapter files and EPUB (`"source_type": "epu
 path like `/novels/book.epub`). Ingestion runs through Celery; poll `/ingest/status/{task_id}`
 for progress. Chapters are indexed in reading order and can be asked about as soon as they
 are in, so questions about the opening chapters work within seconds while the rest of the book
-is still loading; 300 chapters took 35 seconds on the development server.
+is still loading. The 3,026 chapters of Shadow Slave took 11 minutes on the development
+server.
 
 Ask something:
 

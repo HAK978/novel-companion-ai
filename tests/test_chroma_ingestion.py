@@ -66,7 +66,7 @@ def test_reingestion_with_fewer_chunks_removes_the_surplus(ingest):
     result = ingest(7, 450, version="new")
 
     stored = ingest.stored(7)
-    assert len(stored) == result["chunks_created"]
+    assert len(stored) == result["windows"]
     assert not any("old" in doc for doc in stored)
 
 
@@ -111,6 +111,29 @@ def test_chapters_embedded_in_groups_match_chapters_embedded_alone(ingestion_tas
     grouped = stored(1)
     assert len(grouped) > 3  # several chunks per chapter
     assert grouped == stored(2)
+
+
+def test_chunks_stored_before_windows_are_replaced(ingestion_tasks, ingest):
+    # books ingested before windows hold whole chunks; re-ingesting must leave only windows
+    ingest(7, 10)  # creates the collection
+    collection = ingest.client.get_collection("novel_1")
+    collection.add(ids=["ch_0007_chunk_000", "ch_0007_chunk_001"],
+                   documents=["an old whole chunk", "another old chunk"],
+                   metadatas=[{"chapter_number": 7, "chunk_index": i} for i in range(2)],
+                   embeddings=[[1.0, 2.0, 3.0]] * 2)
+
+    ingest(7, 900, version="new")
+
+    got = collection.get(where={"chapter_number": 7}, include=["metadatas"])
+    assert all("_w" in i for i in got["ids"])
+    assert all("window_index" in m for m in got["metadatas"])
+
+
+def test_the_summary_worker_reads_a_chapter_back_whole(ingestion_tasks, ingest):
+    ingest(7, 900)
+    text = " ".join(f"v1w7_{i}." for i in range(900))
+
+    assert ingestion_tasks._chapter_text(1, 7) == ("Chapter 7", text)
 
 
 def test_a_chapter_without_a_novel_is_rejected(ingestion_tasks):

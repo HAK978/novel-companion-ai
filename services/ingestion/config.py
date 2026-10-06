@@ -7,7 +7,12 @@ DATABASE_URL = os.environ.get(
     "postgresql://novel:novel@localhost:5432/novel_companion"
 )
 GENERATION_SERVICE_URL = os.environ.get("GENERATION_SERVICE_URL", "http://localhost:8003")
+# Passages the model answering a question reads, in words
 CHUNK_SIZE = 400
+# The embedding model reads only the first 256 tokens of a text, about half of a chunk, so
+# chunks are searched through smaller windows: 170 words always fit (measured on the Hound
+# and Shadow Slave 1-300). Windows are 2.7x as many vectors as chunks.
+WINDOW_SIZE = 170
 
 # Chapter summaries are written in the background, only as far as readers have got plus this
 # many chapters: work past every reader's position is wasted until someone reaches it.
