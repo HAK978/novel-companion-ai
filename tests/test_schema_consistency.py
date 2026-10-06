@@ -42,7 +42,8 @@ def unique_constraints() -> dict[str, set[tuple[str, ...]]]:
         ):
             table = table.lower()
             found = constraints.setdefault(table, set())
-            for cols in re.findall(r"\bUNIQUE\s*\(([^)]+)\)", body, re.I):
+            # a primary key is unique too, and ON CONFLICT can target it
+            for cols in re.findall(r"\b(?:UNIQUE|PRIMARY KEY)\s*\(([^)]+)\)", body, re.I):
                 found.add(_columns(cols))
             for line in body.splitlines():
                 stripped = line.strip().rstrip(",")

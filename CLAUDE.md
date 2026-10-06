@@ -10,13 +10,18 @@ scoped to the reader's progress.
 - **Gateway** (8000) — `services/gateway/main.py`. Single entry point, routes via
   httpx.AsyncClient, CORS enabled. Endpoints: /novels CRUD, /ingest, /ingest/from-source,
   /query, /characters/list, /characters/{name}, /summarize, /catch-me-up, /progress,
-  /health (aggregated).
+  /health (aggregated). Answers and range summaries go through `_generate_checked`, which
+  has retrieval take out names the reader has not reached; /query reports `spoiler_check`
+  ("withheld" or "clean"), never the names. Asking the model to rewrite without them was
+  tried first and dropped: it kept the name in 5 of 12 tries and complying rewrites got
+  worse.
 - **Ingestion** (8001) — `services/ingestion/`. Celery tasks (`tasks.py`, core logic in
   `_process_chapter()`): clean HTML → chunk (~400 words, sentence-boundary, `chunking.py`)
   → split each chunk into windows of ≤170 words (`split_windows`, lossless) → embed the windows
   (all-MiniLM-L6-v2, Chroma's ONNX build; bulk ingests embed 32 chapters per call in
   `_ingest_chapters()`) → store the windows in ChromaDB (`chunk_index`, `window_index`) →
-  chapter record in
+  the chapter's words in `book_words` (where each word first appears, and first appears in
+  lowercase; `words.py`) → chapter record in
   PostgreSQL → optional entity extraction via generation service. Source adapters in
   `adapters/` (local_json handles nested dirs via rglob, epub). Chapter summaries: the
   `summary-worker` (Celery queue `summaries`) writes one per chapter through generation's
@@ -26,7 +31,11 @@ scoped to the reader's progress.
 - **Retrieval** (8002) — `services/retrieval/`. ChromaDB similarity search over windows that
   returns the whole chunks they belong to, each once, ranked by its best window
   (`search.py`); spoiler filter `chapter_number <= current_chapter`, optional `min_chapter`
-  floor, adaptive n_results, character lookup from PostgreSQL.
+  floor, adaptive n_results, character lookup from PostgreSQL. `/withhold-unread-names`:
+  takes out of a text the names the book first uses after the reader's chapter (words it
+  never writes in lowercase, from `book_words`), ignoring the reader's own words. `names.py`:
+  from a longer name when a name is left ("his wife, Beryl Garcia" → "his wife, Beryl"),
+  otherwise the whole sentence.
 - **Generation** (8003) — `services/generation/`. One OpenAI-compatible client
   (`llm_client.py`) configured by `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY`; the default
   is the compose `vllm` service (`http://vllm:8000/v1`, host port 8004). No GPU code: an
@@ -44,7 +53,8 @@ scoped to the reader's progress.
 
 PostgreSQL `novel_companion`. Migrations in `migrations/`. Tables: novels, chapters,
 characters (unique on (novel_id, name)), character_aliases, character_relationships, character_mentions,
-chapter_summaries (one per chapter), range_summaries (cache of /summarize answers), reading_progress,
+chapter_summaries (one per chapter), range_summaries (cache of /summarize answers),
+book_words (where each word first appears), reading_progress,
 search_history. All scoped by novel_id.
 Each novel gets its own ChromaDB collection (`novel_{id}`).
 
@@ -59,6 +69,8 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   -d '{"novel_id": N}'` (add `"up_to": M` to go further). ~0.7 s per chapter with 16 model calls
   in flight (`SUMMARY_PARALLEL`; 8 was ~2.4 s). After changing the name check:
   `docker compose exec ingestion python -c "from tasks import recheck_summary_flags as r; print(r(N))"`.
+  A novel ingested before `book_words` existed needs `rebuild_word_index(N)` the same way
+  (from its indexed chapters; ~80 s for Shadow Slave), then a recheck.
 - **Bulk ingest:** POST /ingest/from-source with `extract_entities: false` (default) and a
   `source_path` under `/novels` (host `NOVEL_DATA_DIR`). ~0.22 s/chapter: Shadow Slave's 3,026
   chapters in 11 min (whole chunks before windows took ~0.12 s; embedding one chapter per call,
@@ -128,17 +140,22 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
 - Keep `summary-worker` at concurrency 1: each task already has `SUMMARY_PARALLEL` model calls
   in flight, and two tasks could summarize the same chapters. Chapters waiting for a summary
   are tracked in Redis (`summaries:pending:<novel>`) so repeated scheduling adds no duplicates.
-- Summaries record names their chapter (title included) never mentions (`unverified_names`):
-  possible additions from the model's memory of the book. Heading words ("Chapter 12 Summary
-  (Part 1 of 2)") are ignored. On Shadow Slave 1-1391 it flags 33 of 1,390: one real leak
-  (chapter 33's summary used "Underworld", first in the book at chapter 250), four words the
-  book never uses ("Cassandra", "Fawkes", "Sightless", "Transcender"), and 28 harmless (names
-  from earlier chapters). The Hound: 6 of 15, including an invented name (chapter 11 calls Mr.
-  Frankland "Captain John Sebastian Morland Frankland") and the book's title in chapter 1's
-  summary. Checking against the book up to the chapter instead (a per-novel index of where each
-  word first appears) would leave 6 and 3 flags with every real one (the extra Shadow Slave flag
-  is "Antarctic" against the text's "Antarctica"), and would also answer "is this name in what
-  I've read?".
+- Summaries record names the book has not used by their chapter, or never uses
+  (`unverified_names`, checked against `book_words`): additions from the model's memory of
+  the book. Heading words ("Chapter 12 Summary (Part 1 of 2)") and sentence-opening words are
+  ignored. Shadow Slave 1-1391: 6 of 1,390 flagged, one real leak (chapter 33's summary used
+  "Underworld", first in the book at chapter 250), four words the book never uses
+  ("Cassandra", "Fawkes", "Sightless", "Transcender"), and "Antarctic" against the text's
+  "Antarctica". Hound: 3 of 15, an invented name (chapter 11 calls Mr. Frankland "Captain John
+  Sebastian Morland Frankland"), the book's title in chapter 1's summary, "Inspector" for
+  Lestrade. (Checked against each chapter alone it was 33 and 6: names from earlier chapters.)
+- **Name check limits.** `book_words` keys words by `words.stem`, identical copies in
+  ingestion and retrieval (tests/test_words.py fails on drift); names ending in s reduce too
+  ("Nephis" → "nephi"), harmlessly, since both sides reduce alike. Measured: on the Hound's
+  chapter-14 question the model added "Garcia" in 7 of 24 answers; all were withheld, and 141
+  evaluated answers named no one the reader had not met (3 had, before). Only names are checked
+  (words the book never writes in lowercase): a hint without a name gets through (at chapter
+  11, "the brother, Rodger" hints at Stapleton's identity; Rodger is named in chapter 2).
 - **Chapter summaries get who-did-what wrong about 1 time in 5.** Read against their chapters:
   Shadow Slave 19 of 25 accurate, the 5 wrong ones mostly crediting an event to the wrong
   character; the Hound has the same errors. Use them for recaps and for finding where something

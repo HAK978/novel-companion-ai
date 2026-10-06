@@ -20,7 +20,8 @@ SERVICES = ROOT / "services"
 
 # Module names services import from their own directory, which must not leak
 # between loads.
-_FLAT_NAMES = ("config", "main", "search", "chunking", "tasks", "llm_client", "vector_store")
+_FLAT_NAMES = ("config", "main", "search", "chunking", "tasks", "llm_client", "vector_store",
+               "words", "names")
 
 
 def load_module(service: str, filename: str, alias: str | None = None):
@@ -239,6 +240,8 @@ class FakeAsyncClient:
         self.calls.append({"method": method, "url": url, "payload": payload})
         for fragment, response in self._routes.items():
             if fragment in url:
+                if callable(response):  # a route may answer according to the request
+                    response = response(payload)
                 # a route may supply a FakeResponse directly to set a status code
                 return response if isinstance(response, FakeResponse) else FakeResponse(response)
         raise AssertionError(f"unexpected {method} to {url}")

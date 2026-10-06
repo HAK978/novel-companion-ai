@@ -15,7 +15,7 @@ pytestmark = pytest.mark.db
 MIGRATIONS = sorted((Path(__file__).resolve().parent.parent / "migrations").glob("*.sql"))
 NOVEL_SCOPED_TABLES = (
     "chapters", "characters", "character_mentions", "character_relationships",
-    "chapter_summaries", "range_summaries", "reading_progress", "search_history",
+    "chapter_summaries", "range_summaries", "reading_progress", "search_history", "book_words",
 )
 
 

@@ -64,6 +64,9 @@ class QueryResponse(BaseModel):
     answer: str | None
     model_used: str = "none"
     sources: list[ChunkResult]
+    # "withheld" when the answer named someone the reader has not reached and the name was
+    # taken out; never which name, since that would be the spoiler
+    spoiler_check: str = "clean"
 
 
 class IngestRequest(BaseModel):
@@ -206,7 +209,7 @@ def _delete_novel_rows(novel_id: int) -> None:
                 OR character_b_id IN (SELECT id FROM characters WHERE novel_id = :id)
         """), {"id": novel_id})
         for table in ["search_history", "reading_progress", "range_summaries",
-                      "chapter_summaries", "characters", "chapters"]:
+                      "chapter_summaries", "book_words", "characters", "chapters"]:
             conn.execute(text(f"DELETE FROM {table} WHERE novel_id = :id"), {"id": novel_id})
         conn.execute(text("DELETE FROM novels WHERE id = :id"), {"id": novel_id})
         conn.commit()
@@ -265,6 +268,39 @@ async def character_recall(name: str, novel_id: int, current_chapter: int):
 
 # --- Query ---
 
+# What a reader is told when every sentence of an answer named someone they have not reached
+NOTHING_LEFT = "I couldn't find that in the chapters you've read."
+
+
+async def _generate_checked(client, payload: dict, novel_id: int, said: str) -> tuple[dict, str]:
+    """Generate, then take out any name the reader has not reached.
+
+    Passages only come from chapters the reader has read, but the model may know the book: at
+    chapter 14 of the Hound it called Stapleton's wife "Beryl Garcia", a name the book first
+    uses in chapter 15, in 3 of 3 runs. Retrieval finds such names in the book's word record
+    and takes them out. Asking the model to rewrite without them was tried first: it still
+    used the name in 5 of 12 tries, and complying rewrites got worse (naming the wrong woman),
+    while the first answer minus the name ("his wife, Beryl") was right. With this, that
+    question got the name in 7 of 24 answers and every one was withheld. `said` is what the
+    reader wrote, whose names are theirs. Returns the generation's response and whether a
+    name was withheld (see QueryResponse).
+    """
+    resp = await client.post(f"{GENERATION_SERVICE_URL}/generate", json=payload)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Generation service failed")
+    data = resp.json()
+    check = await client.post(f"{RETRIEVAL_SERVICE_URL}/withhold-unread-names", json={
+        "novel_id": novel_id, "current_chapter": payload["current_chapter"],
+        "text": data.get("answer") or "", "ignore": said})
+    if check.status_code != 200:
+        raise HTTPException(status_code=502, detail="Spoiler check failed")
+    checked = check.json()
+    if not checked.get("withheld"):
+        return data, "clean"
+    data["answer"] = checked["text"] or NOTHING_LEFT
+    return data, "withheld"
+
+
 @app.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest):
     collection_name = f"novel_{request.novel_id}"
@@ -291,18 +327,12 @@ async def query(request: QueryRequest):
             f"[Chapter {r['chapter_number']}: {r.get('chapter_title', '')}]\n{r['text']}"
             for r in results
         ]
-        gen_resp = await client.post(
-            f"{GENERATION_SERVICE_URL}/generate",
-            json={
-                "query": request.query,
-                "context_chunks": context_chunks,
-                "conversation_context": request.conversation_context,
-                "current_chapter": request.current_chapter,
-            },
-        )
-        if gen_resp.status_code != 200:
-            raise HTTPException(status_code=502, detail="Generation service failed")
-        gen_data = gen_resp.json()
+        gen_data, check = await _generate_checked(client, {
+            "query": request.query,
+            "context_chunks": context_chunks,
+            "conversation_context": request.conversation_context,
+            "current_chapter": request.current_chapter,
+        }, request.novel_id, said=f"{request.query} {request.conversation_context}")
 
     def record_search():
         with engine.connect() as conn:
@@ -322,6 +352,7 @@ async def query(request: QueryRequest):
         answer=gen_data.get("answer"),
         model_used=gen_data.get("model_used", "none"),
         sources=results,
+        spoiler_check=check,
     )
 
 
@@ -395,27 +426,21 @@ async def summarize(request: SummarizeRequest):
         if not results:
             return {"error": "No content found for this chapter range"}
 
-        gen_resp = await client.post(
-            f"{GENERATION_SERVICE_URL}/generate",
-            json={
-                "query": (
-                    f"Summarize the key events, character developments, and plot points "
-                    f"from chapters {request.start_chapter} to {end_ch}. "
-                    f"Be comprehensive but concise."
-                ),
-                "context_chunks": [
-                    f"[Chapter {r['chapter_number']}: {r.get('chapter_title', '')}]\n{r['text']}"
-                    for r in results
-                ],
-                "current_chapter": end_ch,
-            },
-        )
+        # A failed generation is a failure, not a summary: it raises, and is never cached.
+        gen_data, _ = await _generate_checked(client, {
+            "query": (
+                f"Summarize the key events, character developments, and plot points "
+                f"from chapters {request.start_chapter} to {end_ch}. "
+                f"Be comprehensive but concise."
+            ),
+            "context_chunks": [
+                f"[Chapter {r['chapter_number']}: {r.get('chapter_title', '')}]\n{r['text']}"
+                for r in results
+            ],
+            "current_chapter": end_ch,
+        }, request.novel_id, said="")
 
-    # A failed generation is a failure, not a summary: surface it, never cache it.
-    if gen_resp.status_code != 200:
-        raise HTTPException(status_code=502, detail="Generation service failed")
-
-    summary = gen_resp.json().get("answer") or ""
+    summary = gen_data.get("answer") or ""
     if not summary:
         raise HTTPException(status_code=502, detail="Generation returned no summary")
 

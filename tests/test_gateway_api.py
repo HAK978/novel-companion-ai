@@ -76,7 +76,9 @@ def wire(gateway_main, monkeypatch, fake_async_client):
     """Patch downstream HTTP and the database; return recorded calls."""
 
     def _wire(routes, row=None):
-        factory, calls = fake_async_client(routes)
+        # the spoiler check withholds nothing unless a test says otherwise
+        factory, calls = fake_async_client({
+            "/withhold-unread-names": lambda p: {"text": p["text"], "withheld": 0}, **routes})
         monkeypatch.setattr(gateway_main.httpx, "AsyncClient", factory)
         engine = FakeEngine(row)
         monkeypatch.setattr(gateway_main, "engine", engine)
@@ -431,3 +433,74 @@ def test_progress_is_saved_even_when_ingestion_is_down(client, gateway_main, mon
 
     assert resp.status_code == 200
     assert any("INSERT INTO reading_progress" in s["sql"] for s in engine.statements)
+
+
+# --- names the reader has not reached ---
+# Passages come only from chapters the reader has read, but the model may know the book: at
+# chapter 14 of the Hound it called Stapleton's wife "Beryl Garcia", a name first used in
+# chapter 15. Retrieval takes such names out (/withhold-unread-names).
+
+LEAKY = {"answer": "She is his wife, Beryl Garcia.", "model_used": "test-model"}
+
+
+def withholding(cleaned):
+    return {"text": cleaned, "withheld": 1}
+
+
+def ask(client, query="Who was tied up?", chapter=14):
+    return client.post("/query", json={"query": query, "novel_id": 3, "current_chapter": chapter})
+
+
+def test_an_answer_naming_no_one_unread_is_returned_as_written(client, wire):
+    wire({"/search": SEARCH_HIT, "/generate": GENERATED})
+
+    body = ask(client).json()
+
+    assert body["answer"] == GENERATED["answer"]
+    assert body["spoiler_check"] == "clean"
+
+
+def test_names_the_reader_has_not_reached_are_taken_out(client, wire):
+    calls, _ = wire({"/search": SEARCH_HIT, "/generate": LEAKY,
+                     "/withhold-unread-names": withholding("She is his wife, Beryl.")})
+
+    body = ask(client).json()
+
+    assert body["answer"] == "She is his wife, Beryl."
+    assert body["spoiler_check"] == "withheld"
+    assert sum("/generate" in c["url"] for c in calls) == 1  # no second model call
+
+
+def test_an_answer_with_nothing_left_says_it_could_not_find_it(client, wire, gateway_main):
+    wire({"/search": SEARCH_HIT, "/generate": LEAKY, "/withhold-unread-names": withholding("")})
+
+    assert ask(client).json()["answer"] == gateway_main.NOTHING_LEFT
+
+
+def test_the_check_knows_the_reader_and_their_own_words(client, wire):
+    calls, _ = wire({"/search": SEARCH_HIT, "/generate": GENERATED})
+
+    ask(client, query="Who is Garcia?", chapter=14)
+
+    check = next(c for c in calls if "/withhold-unread-names" in c["url"])["payload"]
+    assert (check["novel_id"], check["current_chapter"]) == (3, 14)
+    assert check["text"] == GENERATED["answer"]
+    assert "Garcia" in check["ignore"]
+
+
+def test_a_failed_check_is_an_error_not_an_unchecked_answer(client, wire):
+    wire({"/search": SEARCH_HIT, "/generate": GENERATED,
+          "/withhold-unread-names": FakeResponse({"detail": "down"}, 500)})
+
+    assert ask(client).status_code == 502
+
+
+def test_summaries_are_checked_before_they_are_cached(client, wire):
+    _, engine = wire({"/search": SEARCH_HIT, "/generate": LEAKY,
+                      "/withhold-unread-names": withholding("She is his wife, Beryl.")})
+
+    body = client.post("/summarize", json={"novel_id": 3, "start_chapter": 10,
+                                           "end_chapter": 14}).json()
+
+    cached = next(s for s in engine.statements if "INSERT INTO range_summaries" in s["sql"])
+    assert body["summary"] == cached["params"]["sum"] == "She is his wife, Beryl."

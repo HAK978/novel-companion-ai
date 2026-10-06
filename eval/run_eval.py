@@ -122,7 +122,9 @@ def ask_app(args, item) -> dict:
     body = resp.json()
     return {"answer": body.get("answer") or "",
             "sources": [{"chapter_number": s["chapter_number"], "text": s["text"]}
-                        for s in body.get("sources", [])]}
+                        for s in body.get("sources", [])],
+            # whether the app found a name the reader has not reached and rewrote the answer
+            "spoiler_check": body.get("spoiler_check")}
 
 
 def ask_model_directly(args, item) -> dict:
@@ -216,6 +218,9 @@ def summarize(rows) -> dict:
         "answers_leaking": count(rows, "leak", "LEAK"),
         "answers_to_review": sum(bool(r.get("leak_review")) for r in rows),
     }}
+    checked = [r["spoiler_check"] for r in rows if r.get("spoiler_check")]
+    if checked:
+        out["overall"]["rewritten_by_name_check"] = sum(c != "clean" for c in checked)
     timed = sorted(r["seconds"] for r in rows if r.get("seconds") is not None)
     if timed:
         out["overall"]["median_seconds"] = timed[len(timed) // 2]
@@ -308,6 +313,10 @@ def main():
             seconds = round(time.perf_counter() - started, 2)
         row = score(args, item, reply["answer"], reply["sources"], reveals, names)
         row["seconds"] = seconds
+        if reply.get("spoiler_check"):
+            row["spoiler_check"] = reply["spoiler_check"]
+        elif args.rejudge and stored[item["id"]].get("spoiler_check"):
+            row["spoiler_check"] = stored[item["id"]]["spoiler_check"]
         if reply["sources"] and "text" in reply["sources"][0]:
             row["sources"] = reply["sources"]
         rows.append(row)

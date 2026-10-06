@@ -47,6 +47,10 @@ def novel(ingestion_tasks, db_engine, monkeypatch):
         conn.execute(text(
             "INSERT INTO reading_progress (novel_id, user_id, current_chapter) "
             "VALUES (1, 'default', 2)"))
+    with db_engine.connect() as conn:  # the book's words, as ingestion records them
+        for n in range(1, 7):
+            ingestion_tasks._record_words(conn, 1, n, f"Chapter {n} Sunny waited by the gate.")
+        conn.commit()
     return db_engine
 
 

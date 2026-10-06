@@ -25,6 +25,13 @@ the model named the culprit from memory in 7 of 20 answers. The reader's positio
 no-outside-knowledge rule now go to the model as a system message, which brought that to
 0 of 40 on the same questions.
 
+The model can still slip in a name it remembers from later in the book: at chapter 14 it
+called Stapleton's wife "Beryl Garcia", a name the book first uses in chapter 15, in 7 of 24
+answers to one question. So ingestion records the chapter where each word of the book first
+appears, and any name the reader hasn't reached is taken out of an answer before it is shown
+("his wife, Beryl"). In the evaluation runs since, no answer has named anyone the reader
+hasn't met.
+
 ## Architecture
 
 ```

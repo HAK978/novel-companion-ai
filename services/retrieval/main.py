@@ -1,9 +1,11 @@
 from config import DATABASE_URL
 from fastapi import FastAPI
+from names import withhold
 from pydantic import BaseModel, Field
 from search import delete_collection, search_chunks
 from sqlalchemy import create_engine
 from sqlalchemy import text as sa_text
+from words import CAPITALIZED, WORD, stem
 
 app = FastAPI(title="Retrieval Service")
 engine = create_engine(DATABASE_URL)
@@ -172,6 +174,41 @@ def list_characters(novel_id: int, current_chapter: int):
         }
         for r in rows
     ]
+
+
+class WithholdRequest(BaseModel):
+    novel_id: int
+    current_chapter: int
+    text: str
+    # what the reader wrote (their question): repeating their own words back is no leak
+    ignore: str = ""
+
+
+@app.post("/withhold-unread-names")
+def withhold_unread_names(request: WithholdRequest):
+    """`text` without the names the reader has not reached: words the book only ever writes
+    capitalized, first used after `current_chapter`. A model that knows the book uses them
+    even when every passage it was given comes from chapters the reader has read: at chapter
+    14 of the Hound it called Stapleton's wife "Beryl Garcia", a name the book first uses in
+    chapter 15. `withheld` counts the names taken out (never listed: they are the spoiler)."""
+    ignore = {stem(w) for w in WORD.findall(request.ignore)}
+    capitalized = {stem(w) for w in CAPITALIZED.findall(request.text)}
+    names: dict[str, int] = {}  # the capitalized words that are names: first chapter
+    if capitalized:
+        with engine.connect() as conn:
+            names = dict(conn.execute(
+                sa_text("""
+                    SELECT word, first_chapter FROM book_words
+                    WHERE novel_id = :nid AND word = ANY(:words)
+                      AND first_lowercase_chapter IS NULL
+                """),
+                {"nid": request.novel_id, "words": sorted(capitalized)},
+            ).all())
+    unread = {w for w, first in names.items()
+              if first > request.current_chapter and w not in ignore}
+    if not unread:
+        return {"text": request.text, "withheld": 0}
+    return {"text": withhold(request.text, unread, set(names)), "withheld": len(unread)}
 
 
 @app.post("/delete-collection")

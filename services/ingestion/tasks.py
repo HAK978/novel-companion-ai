@@ -23,6 +23,7 @@ from sqlalchemy import create_engine
 from sqlalchemy import text as sa_text
 from sqlalchemy.exc import IntegrityError
 from vector_store import UnpinnedCollectionError, embedding_function, open_collection
+from words import CAPITALIZED, stem, word_uses
 
 celery_app = Celery("ingestion", broker=REDIS_URL, backend=REDIS_URL)
 celery_app.conf.update(
@@ -192,6 +193,8 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False,
                 "ts": datetime.now(UTC),
             },
         )
+
+        _record_words(conn, novel_id, chapter_num, f"{title} {text}")
 
         # Update novel chapter count
         if novel_id:
@@ -379,6 +382,43 @@ def ingest_from_source(self, source_data: dict):
     }
 
 
+# Where each word of a book first appears, and first appears in lowercase (a word never
+# written in lowercase is a name): answers and summaries are checked against it for names the
+# reader has not reached. Chapters arrive in any order (re-ingestion, several workers), so the
+# earliest chapter wins.
+_RECORD_WORDS = sa_text("""
+    INSERT INTO book_words (novel_id, word, first_chapter, first_lowercase_chapter)
+    SELECT :nid, word, :ch, CASE WHEN lowercase THEN :ch END
+    FROM unnest(CAST(:words AS TEXT[]), CAST(:lowercase AS BOOLEAN[])) AS w(word, lowercase)
+    ON CONFLICT (novel_id, word) DO UPDATE SET
+        first_chapter = LEAST(book_words.first_chapter, EXCLUDED.first_chapter),
+        first_lowercase_chapter = LEAST(book_words.first_lowercase_chapter,
+                                        EXCLUDED.first_lowercase_chapter)
+""")
+
+
+def _record_words(conn, novel_id: int, chapter_number: int, text: str) -> None:
+    uses = word_uses(text)
+    conn.execute(_RECORD_WORDS, {"nid": novel_id, "ch": chapter_number, "words": list(uses),
+                                 "lowercase": list(uses.values())})
+
+
+def rebuild_word_index(novel_id: int) -> dict:
+    """Record where each word first appears, from the chapters already indexed: for novels
+    ingested before the record existed. Ingestion keeps it up to date from then on."""
+    with engine.connect() as conn:
+        chapters = conn.execute(sa_text(
+            "SELECT chapter_number FROM chapters "
+            "WHERE novel_id = :nid AND ingestion_status = 'complete'"
+        ), {"nid": novel_id}).scalars().all()
+    for number in chapters:
+        title, text = _chapter_text(novel_id, number)
+        with engine.connect() as conn:
+            _record_words(conn, novel_id, number, f"{title} {text}")
+            conn.commit()
+    return {"novel_id": novel_id, "chapters": len(chapters)}
+
+
 def _ingest_chapters(novel_id: int, chapters: list[dict], extract_entities: bool = False,
                      reader_chapter: int = 0, report=None) -> list[dict]:
     """Index chapters in reading order, EMBED_GROUP chapters' windows per embedding call. Each
@@ -515,45 +555,51 @@ def _chapter_text(novel_id: int, chapter_number: int) -> tuple[str, str]:
 _OPENS_SENTENCE = re.compile(r"(^|[.!?:;\n])[^A-Za-z]*$")
 
 
-def _stem(word: str) -> str:
-    word = word.lower()
-    if word.endswith("ies") and len(word) > 5:
-        return word[:-3] + "y"
-    for suffix in ("'s", "s"):
-        if word.endswith(suffix) and len(word) > len(suffix) + 2:
-            return word[:-len(suffix)]
-    return word
-
-
 _HEADING_WORDS = ("Chapter", "Part", "Summary")
 
 
-def _unverified_names(summary: str, title: str, text: str) -> list[str]:
-    """Capitalized words in a summary that its chapter (title included) never uses, in any
-    form. A summary should name only what its chapter does, so these may come from the
-    model's memory of the book: that is how a summary could carry a spoiler. Words opening a
-    sentence are skipped (they are capitalized anyway), as are the words of the headings the
-    model writes ("Chapter 12 Summary (Part 1 of 2):"); plurals and possessives match their
-    stem."""
-    vocabulary = {_stem(w) for w in re.findall(r"[A-Za-z']+", f"{title} {text}")}
-    flagged = set()
-    for match in re.finditer(r"\b[A-Z][a-z]{2,}\b", summary):
-        if _OPENS_SENTENCE.search(summary[:match.start()]) or match.group() in _HEADING_WORDS:
-            continue
-        if _stem(match.group()) not in vocabulary:
-            flagged.add(match.group())
-    return sorted(flagged)
+def _name_candidates(summary: str) -> list[str]:
+    """Capitalized words in a summary that could be names. Words opening a sentence are
+    capitalized anyway, and the headings the model writes ("Chapter 12 Summary (Part 1 of
+    2):") are not the book's words."""
+    return [m.group() for m in CAPITALIZED.finditer(summary)
+            if not (_OPENS_SENTENCE.search(summary[:m.start()]) or m.group() in _HEADING_WORDS)]
+
+
+def _unverified_names(summary: str, first_chapter: dict[str, int], chapter: int) -> list[str]:
+    """Names in a chapter's summary that the book has not used by that chapter, or never uses
+    (`first_chapter`: where each reduced word first appears). They come from the model's
+    memory of the book, which is how a summary could carry a spoiler. Checked against the
+    book so far, not the chapter alone, since a reader knows the names of earlier chapters:
+    on Shadow Slave that left 6 of 33 flags, with every real one."""
+    return sorted({w for w in _name_candidates(summary)
+                   if first_chapter.get(stem(w), chapter + 1) > chapter})
+
+
+def _first_chapters(novel_id: int, words: list[str]) -> dict[str, int]:
+    """Where each of these words first appears in the novel, keyed by its reduced form."""
+    keys = sorted({stem(w) for w in words})
+    if not keys:
+        return {}
+    with engine.connect() as conn:
+        return dict(conn.execute(sa_text(
+            "SELECT word, first_chapter FROM book_words "
+            "WHERE novel_id = :nid AND word = ANY(:words)"
+        ), {"nid": novel_id, "words": keys}).all())
 
 
 def recheck_summary_flags(novel_id: int) -> dict:
-    """Recompute unverified_names for a novel's stored summaries, after the check changes."""
+    """Recompute unverified_names for a novel's stored summaries, after the check or the word
+    record changes."""
     with engine.connect() as conn:
         rows = conn.execute(sa_text(
             "SELECT chapter_number, summary FROM chapter_summaries WHERE novel_id = :nid"
         ), {"nid": novel_id}).all()
+    first = _first_chapters(novel_id, [w for _, summary in rows for w in _name_candidates(summary)])
+    with engine.connect() as conn:
         flagged = 0
         for chapter_number, summary in rows:
-            names = _unverified_names(summary, *_chapter_text(novel_id, chapter_number))
+            names = _unverified_names(summary, first, chapter_number)
             flagged += bool(names)
             conn.execute(sa_text(
                 "UPDATE chapter_summaries SET unverified_names = :names "
@@ -610,14 +656,15 @@ def summarize_chapters(self, novel_id: int, chapter_numbers: list[int]):
     _unqueue(novel_id, done)
 
     def summarize(chapter_number):
-        title, text = _chapter_text(novel_id, chapter_number)
+        _, text = _chapter_text(novel_id, chapter_number)
         if not text:
             return chapter_number, None
         resp = httpx.post(f"{GENERATION_SERVICE_URL}/chapter-summary", timeout=600,
                           json={"chapter_number": chapter_number, "chapter_text": text})
         resp.raise_for_status()
         result = resp.json()
-        result["unverified_names"] = _unverified_names(result["summary"], title, text)
+        first = _first_chapters(novel_id, _name_candidates(result["summary"]))
+        result["unverified_names"] = _unverified_names(result["summary"], first, chapter_number)
         return chapter_number, result
 
     written = 0

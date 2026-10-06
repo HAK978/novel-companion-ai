@@ -263,23 +263,41 @@ def test_summaries_start_once_the_readers_chapters_are_in(ingestion_tasks, group
     assert scheduled == [{"reader": reader, "stored": stored_when_scheduled}]
 
 
+def test_chapter_words_are_recorded_with_the_title(ingestion_tasks, pipeline, monkeypatch):
+    # the word record is what answers and summaries are checked against; readers see titles
+    recorded = []
+    monkeypatch.setattr(ingestion_tasks, "_record_words",
+                        lambda conn, novel_id, chapter, text: recorded.append((novel_id, chapter, text)))
+
+    ingestion_tasks._process_chapter(dict(CHAPTER))
+
+    assert [(n, c) for n, c, _ in recorded] == [(1, 7)]
+    assert recorded[0][2].startswith("Seven The shadow moved")
+
+
 # --- checking chapter summaries ---
 
-@pytest.mark.parametrize("summary,title,text,flagged", [
-    # a name the chapter never uses is flagged: it may come from the model's memory
-    ("Sunny crosses the bridge while Mordret watches.", "", "sunny crossed the bridge", ["Mordret"]),
-    # the title counts as part of the chapter
-    ('In Chapter 16, "Rebirth," Sunny changes.', "Chapter 16 Rebirth", "sunny changed", []),
+@pytest.mark.parametrize("summary,book,flagged", [
+    # a name the book never uses is flagged: it may come from the model's memory
+    ("Sunny crosses the bridge while Mordret watches.", "sunny crossed the bridge", ["Mordret"]),
     # words opening a sentence are capitalized anyway
-    ("Sunny falls. Despite this, he rises.", "", "sunny fell and rose", []),
-    # plurals and possessives match their stem
-    ("The Baskervilles trust Barrymore's wife.", "", "a baskerville and barrymore", []),
-    ("Sunny counts his Memories.", "", "sunny earned a memory", []),
+    ("Sunny falls. Despite this, he rises.", "sunny fell and rose", []),
+    # plurals and possessives match
+    ("The Baskervilles trust Barrymore's wife.", "a baskerville and barrymore", []),
+    ("Sunny counts his Memories.", "sunny earned a memory", []),
     # markdown headings and list numbers still open a sentence
-    ("**Summary:** Sunny rests.\n1. Despite everything, he wins.", "", "sunny rested and won", []),
+    ("**Summary:** Sunny rests.\n1. Despite everything, he wins.", "sunny rested and won", []),
     # nor are the words of the headings the model writes
-    ("**Chapter 12 Summary (Part 1 of 2):** Watson waits.", "", "watson waited", []),
+    ("**Chapter 12 Summary (Part 1 of 2):** Watson waits.", "watson waited", []),
 ])
-def test_summary_names_are_checked_against_the_chapter(ingestion_tasks, summary, title, text,
-                                                       flagged):
-    assert ingestion_tasks._unverified_names(summary, title, text) == flagged
+def test_summary_names_are_checked_against_the_book(ingestion_tasks, summary, book, flagged):
+    first = {ingestion_tasks.stem(w): 1 for w in book.split()}
+
+    assert ingestion_tasks._unverified_names(summary, first, 1) == flagged
+
+
+def test_names_from_later_chapters_are_flagged_until_then(ingestion_tasks):
+    first = {ingestion_tasks.stem("Sunny"): 1, ingestion_tasks.stem("Nephis"): 5}
+
+    assert ingestion_tasks._unverified_names("Sunny meets Nephis.", first, 3) == ["Nephis"]
+    assert ingestion_tasks._unverified_names("Sunny meets Nephis.", first, 5) == []
