@@ -2,12 +2,26 @@
 
 [![CI](https://github.com/HAK978/novel-companion-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/HAK978/novel-companion-ai/actions/workflows/ci.yml)
 
-A reading companion for long web novels. Ask questions about the story, look up characters,
-or get a recap of where you left off — answered from the actual chapter text, and scoped so
-nothing past your current chapter is ever used.
+**Ask anything about a 3,000-chapter web novel, without spoilers.**
 
-Runs as a set of Python microservices with a RAG pipeline, and ships an MCP server so
-Model Context Protocol clients (Claude Code, Claude Desktop) can query it as tools.
+A self-hosted AI reading companion. It answers questions, recaps what you've read and looks
+up characters using only the chapters you've reached, even when the model already knows
+how the book ends. Built as FastAPI services around a RAG pipeline and a local LLM (Mistral
+Nemo 12B on vLLM), with an evaluation harness behind every change and an MCP server that
+lets Claude use it as a set of tools.
+
+![A reader at chapter 5 asks two questions: one answered from chapter 3 with sources, one about the ending that the app declines](docs/demo.png)
+
+## Highlights
+
+| | |
+|---|---|
+| **Scale** | Shadow Slave: 3,025 chapters, 3.7M words, indexed in 11 minutes. Early chapters are searchable within seconds while the rest loads |
+| **Retrieval** | Small-to-big retrieval raised retrieval recall from 42% to 53% on 262 questions (p < 0.001) |
+| **Answers** | Answer accuracy on the evaluation set rose from 56% to 68%, with fewer wrong answers |
+| **Spoiler safety** | Retrieval never sees unread chapters. System-prompt rules cut leaks on spoiler-inviting questions from 7 of 20 answers to 0 of 40, and a name filter removes names the reader hasn't reached |
+| **Evaluation** | A golden question set scored in code. An LLM judge matched reference labels on only 30 of 47 spoiler calls, so it was replaced |
+| **Fully local** | Embeddings, LLM, vector store and databases run on one machine. No paid APIs |
 
 ## Why
 
@@ -15,22 +29,37 @@ Web serials often run to thousands of chapters. It's easy to forget who a charac
 what happened a few hundred chapters back, but wikis and summaries are written for people
 who finished the book, so looking anything up means getting spoiled.
 
-Here, every chunk of text is indexed with its chapter number, and retrieval filters on
-`chapter_number <= current_chapter` before searching, so the model never sees unread text.
-That filter is enforced server-side, not left to the prompt.
+## How it works
 
-Retrieval alone isn't enough for a well-known book, though: a model may already know how it
-ends. Asked at chapter 5 of *The Hound of the Baskervilles* who "turns out to be the villain",
-the model named the culprit from memory in 7 of 20 answers. The reader's position and a
-no-outside-knowledge rule now go to the model as a system message, which brought that to
-0 of 40 on the same questions.
+**Spoiler-safe retrieval.** Every passage is indexed with its chapter number, and the
+retrieval service filters on `chapter_number <= current_chapter` before searching, so the
+model never sees unread text. The filter is enforced server-side, not left to the prompt.
 
-The model can still slip in a name it remembers from later in the book: at chapter 14 it
-called Stapleton's wife "Beryl Garcia", a name the book first uses in chapter 15, in 7 of 24
-answers to one question. So ingestion records the chapter where each word of the book first
-appears, and any name the reader hasn't reached is taken out of an answer before it is shown
-("his wife, Beryl"). In the evaluation runs since, no answer has named anyone the reader
-hasn't met.
+**Small-to-big retrieval.** The embedding model reads only the first 256 tokens of a text,
+so each 400-word passage is indexed as smaller windows. Search ranks the windows and hands
+the model the whole passages they belong to. Four designs were benchmarked on the same
+questions before this one shipped (`eval/experiments/chunk_windows.py`).
+
+**Guardrails against the model's memory.** A model may already know a famous book. Asked at
+chapter 5 of *The Hound of the Baskervilles* who "turns out to be the villain", it named the
+culprit from memory; across four such questions it leaked in 7 of 20 answers. The reader's
+position and a no-outside-knowledge rule now go to the model as a system message: 0 of 40.
+It can still slip in a remembered name, so ingestion records the chapter where every word of
+the book first appears, and names the reader hasn't reached are removed before an answer is
+shown. A real answer at chapter 14:
+
+> Model: "…the woman tied to the post in Stapleton's house is his wife, **Beryl Garcia**."
+> Shown: "…the woman tied to the post in Stapleton's house is his wife, **Beryl**."
+
+"Garcia" first appears in chapter 15. On that question the model added the name in 7 of 24
+answers; every one was removed.
+
+**Chapter summaries in the background.** Celery workers write a summary of each chapter,
+newest first from where the reader is, and flag any name the book hasn't used by that
+chapter: a sign the model filled in from memory.
+
+**Evaluation.** A question set built for each reading position, with spoiler traps and
+questions about people who don't exist, scored in code (see [Evaluation](#evaluation)).
 
 ## Architecture
 
@@ -171,13 +200,12 @@ training/       dataset generation for fine-tuning
 
 ## Status
 
-Working: ingestion at scale (tested on a 3,000-chapter web serial, and on a 15-chapter EPUB
-with chapters three times as long), question answering, summarization, character recall,
-progress tracking, MCP server, web UI. Novels are fully isolated: queries, summaries,
-progress and deletion for one never touch another.
+Working: ingestion at scale, question answering, summaries, progress tracking, the MCP
+server and the web UI, with every novel fully isolated. Character questions are answered
+through search; the structured character graph is not populated yet.
 
-Next: an evaluation harness, request tracing, streaming responses, hybrid search with
-reranking, and fine-tuning on a distilled dataset.
+Next: hybrid keyword and vector search with reranking, the character graph through
+schema-constrained extraction, streaming responses and request tracing.
 
 ## Tests
 
