@@ -250,10 +250,12 @@ def test_a_chapter_too_long_for_one_call_is_summarized_in_parts(service, endpoin
     replies["post"] = completion("Part summary.")
 
     body = service.post("/chapter-summary",
-                        json={"chapter_number": 3, "chapter_text": "word " * 20000}).json()
+                        json={"chapter_number": 3, "chapter_text": "word " * 6000}).json()
 
-    assert len(sent) == 3  # 8,000 words per call
+    # at most 2,500 words per call, in equal sections: three of 2,000, not 2,500 + 2,500 + 1,000
+    assert len(sent) == 3
     assert "(part 1 of 3)" in sent[0]["json"]["messages"][1]["content"]
+    assert all(m["json"]["messages"][1]["content"].split().count("word") == 2000 for m in sent)
     assert body["summary"].count("Part summary.") == 3
 
 

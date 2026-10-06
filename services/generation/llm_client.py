@@ -108,7 +108,11 @@ def _spoiler_rules(current_chapter: int | None) -> str:
 # reading every chapter again. Bump the version whenever the prompt changes: stored summaries
 # record it, and older ones can then be found and rewritten.
 SUMMARY_PROMPT_VERSION = 1
-SUMMARY_WORDS_PER_CALL = 8000  # ~11k tokens: leaves room for the reply in a 16k context
+# Longer chapters are summarized in equal sections. In one pass, 120 words could not hold a
+# 3,500-word chapter: checked by hand, the model spent them on the opening and dropped the
+# ending (the Hound's chapters 5 and 14), or ran into the reply limit. Chapters of ~1,200 words
+# came out complete.
+SUMMARY_WORDS_PER_CALL = 2500
 SUMMARY_SYSTEM = (
     "You summarize one chapter of a book at a time, for readers who have read up to that "
     "chapter. You may recognize this book: never use that knowledge, and never mention "
@@ -127,13 +131,14 @@ def chapter_summary_prompt(chapter_number: int, text: str, part: str = "") -> st
 def summarize_chapter(llm: "LLMClient", chapter_number: int, text: str) -> str:
     """One summary per chapter. A chapter too long for one call is summarized in parts."""
     words = text.split()
-    parts = [" ".join(words[i:i + SUMMARY_WORDS_PER_CALL])
-             for i in range(0, len(words), SUMMARY_WORDS_PER_CALL)] or [""]
+    count = max(1, -(-len(words) // SUMMARY_WORDS_PER_CALL))  # sections needed, rounded up
+    size = -(-len(words) // count) if words else 1  # equal sections, not one long and one stub
+    parts = [" ".join(words[i:i + size]) for i in range(0, len(words), size)] or [""]
     summaries = []
     for i, part in enumerate(parts, 1):
         label = f" (part {i} of {len(parts)})" if len(parts) > 1 else ""
         summaries.append(llm.complete(chapter_summary_prompt(chapter_number, part, label),
-                                      system=SUMMARY_SYSTEM, max_tokens=300, temperature=0))
+                                      system=SUMMARY_SYSTEM, max_tokens=400, temperature=0))
     return "\n\n".join(summaries)
 
 

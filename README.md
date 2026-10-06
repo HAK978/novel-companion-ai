@@ -110,8 +110,8 @@ machine, `scripts/start_vllm.sh` starts it on an idle GPU and `docker compose st
 releases it.
 
 Chapter summaries are written in the background while the model is being served, up to 100
-chapters past the furthest reader, and extended as reading progress moves on;
-`curl localhost:8000/novels/1/summaries` shows how far they have got.
+chapters past the furthest reader, starting with the chapters just read, and extended as
+reading progress moves on; `curl localhost:8000/novels/1/summaries` shows how far they have got.
 
 Before any service starts, a one-shot `migrate` container applies pending `migrations/*.sql`
 in order and records each in a `schema_migrations` table, so this always answers "is the
@@ -136,7 +136,9 @@ curl -X POST localhost:8000/ingest/from-source -H 'Content-Type: application/jso
 
 Adapters handle directories of JSON chapter files and EPUB (`"source_type": "epub"` with a
 path like `/novels/book.epub`). Ingestion runs through Celery; poll `/ingest/status/{task_id}`
-for progress. Roughly a second per chapter.
+for progress. Chapters are indexed in reading order and can be asked about as soon as they
+are in, so questions about the opening chapters work within seconds while the rest of the book
+is still loading; 300 chapters took 35 seconds on the development server.
 
 Ask something:
 

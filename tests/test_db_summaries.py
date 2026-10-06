@@ -71,14 +71,22 @@ def summarize(novel, chapter, version):
 def test_summaries_are_queued_up_to_the_reader_plus_the_lookahead(ingestion_tasks, novel, queue):
     result = ingestion_tasks.schedule_summaries(1)
 
-    assert queue == [[1, 2, 3, 4]]
+    assert sorted(queue[0]) == [1, 2, 3, 4]
     assert result["up_to"] == 4
 
 
 def test_a_reader_further_on_extends_the_horizon(ingestion_tasks, novel, queue):
     ingestion_tasks.schedule_summaries(1, reader_chapter=4)
 
-    assert queue == [[1, 2, 3, 4, 5, 6]]
+    assert sorted(queue[0]) == [1, 2, 3, 4, 5, 6]
+
+
+def test_the_chapters_just_read_are_summarized_first(ingestion_tasks, novel, queue):
+    # newest first back from the reader, so a recap of the last few chapters works long
+    # before chapter 1's summary is needed; the chapters ahead of the reader come last
+    ingestion_tasks.schedule_summaries(1, reader_chapter=4)
+
+    assert queue == [[4, 3, 2, 1, 5, 6]]
 
 
 def test_queued_chapters_are_not_queued_again(ingestion_tasks, novel, queue):
@@ -86,7 +94,7 @@ def test_queued_chapters_are_not_queued_again(ingestion_tasks, novel, queue):
     ingestion_tasks.schedule_summaries(1)
     again = ingestion_tasks.schedule_summaries(1)
 
-    assert queue == [[1, 2, 3, 4]]
+    assert queue == [[2, 1, 3, 4]]
     assert again["already_queued"] == 4
 
 
@@ -104,7 +112,7 @@ def test_work_is_split_into_batches(ingestion_tasks, novel, queue, monkeypatch):
 
     ingestion_tasks.schedule_summaries(1, up_to=6)
 
-    assert queue == [[1, 2, 3], [4, 5, 6]]
+    assert queue == [[2, 1, 3], [4, 5, 6]]
 
 
 # --- writing ---

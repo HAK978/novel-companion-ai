@@ -21,7 +21,7 @@ from config import (
 from sqlalchemy import create_engine
 from sqlalchemy import text as sa_text
 from sqlalchemy.exc import IntegrityError
-from vector_store import UnpinnedCollectionError, open_collection
+from vector_store import UnpinnedCollectionError, embedding_function, open_collection
 
 celery_app = Celery("ingestion", broker=REDIS_URL, backend=REDIS_URL)
 celery_app.conf.update(
@@ -54,7 +54,8 @@ def _get_collection(collection_name: str):
     return _collections[collection_name]
 
 
-def _replace_chapter_chunks(collection_name, chapter_num, ids, chunks, metadatas):
+def _replace_chapter_chunks(collection_name, chapter_num, ids, chunks, metadatas,
+                            embeddings=None):
     """Make the stored chunks for one chapter exactly `chunks`.
 
     `add()` silently skips ids that already exist, so re-ingesting a chapter used to keep its
@@ -71,6 +72,8 @@ def _replace_chapter_chunks(collection_name, chapter_num, ids, chunks, metadatas
                 documents=chunks[start:end],
                 metadatas=metadatas[start:end],
                 ids=ids[start:end],
+                # computed for many chapters at once; without them, the collection embeds
+                **({"embeddings": embeddings[start:end]} if embeddings is not None else {}),
             )
         collection.delete(where={"$and": [
             {"chapter_number": chapter_num},
@@ -87,7 +90,31 @@ def _replace_chapter_chunks(collection_name, chapter_num, ids, chunks, metadatas
         write(_get_collection(collection_name))
 
 
-def _process_chapter(chapter_data: dict, extract_entities: bool = False) -> dict:
+def _chapter_chunks(content: str) -> tuple[str, list[str]]:
+    text = clean_html(content)
+    return text, chunk_text(text, CHUNK_SIZE)
+
+
+# Chunks are embedded EMBED_GROUP chapters at a time: one chapter at a time, 300 chapters took
+# 52.6 s to ingest; 32 at a time, 35.4 s. The vectors are identical either way: the model pads
+# every chunk to the same length.
+EMBED_GROUP = 32
+_embedder = None
+
+
+def _embed(texts: list[str]) -> list:
+    """Vectors from the pinned model, the same one the collections use."""
+    global _embedder
+    if not texts:
+        return []
+    if _embedder is None:
+        _embedder = embedding_function()
+    return list(_embedder(texts))
+
+
+def _process_chapter(chapter_data: dict, extract_entities: bool = False,
+                     chunked: tuple[str, list[str]] | None = None,
+                     embeddings: list | None = None) -> dict:
     """
     Core logic: clean HTML, chunk, embed, store.
 
@@ -96,6 +123,9 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False) -> dict
     extract_entities: when True, also run LLM character extraction via the
     generation service (~15-20s/chapter). Off by default; recall queries
     answer character questions from RAG without pre-extracted entities.
+
+    chunked, embeddings: the cleaned text and chunks, and their vectors, when the caller
+    already has them (see _ingest_chapters); otherwise computed here.
     """
     novel_id = chapter_data.get("novel_id")
     if not novel_id:
@@ -108,12 +138,9 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False) -> dict
 
     collection_name = f"novel_{novel_id}"
 
-    # 1. Clean HTML
-    text = clean_html(chapter_data["content"])
+    # 1-2. Clean HTML and chunk
+    text, chunks = chunked or _chapter_chunks(chapter_data["content"])
     word_count = len(text.split())
-
-    # 2. Chunk text
-    chunks = chunk_text(text, CHUNK_SIZE)
     if not chunks:
         # a re-ingested chapter that now cleans to nothing must not keep its old chunks
         _replace_chapter_chunks(collection_name, chapter_num, [], [], [])
@@ -132,7 +159,7 @@ def _process_chapter(chapter_data: dict, extract_entities: bool = False) -> dict
         for i in range(len(chunks))
     ]
 
-    _replace_chapter_chunks(collection_name, chapter_num, ids, chunks, metadatas)
+    _replace_chapter_chunks(collection_name, chapter_num, ids, chunks, metadatas, embeddings)
 
     # 4. Update PostgreSQL
     with engine.connect() as conn:
@@ -324,24 +351,11 @@ def ingest_from_source(self, source_data: dict):
     adapter = get_adapter(source_type, source_path)
     chapters = adapter.fetch_all(max_chapters=max_chapters)
 
-    total = len(chapters)
-    self.update_state(state="INGESTING", meta={"novel_id": novel_id, "total_chapters": total, "processed": 0})
-
-    results = []
-    for i, ch in enumerate(chapters, 1):
-        ch["novel_id"] = novel_id
-        result = _process_chapter(ch, extract_entities=extract_entities)
-        results.append(result)
-        if i % 25 == 0 or i == total:
-            self.update_state(
-                state="INGESTING",
-                meta={"novel_id": novel_id, "total_chapters": total, "processed": i},
-            )
-
-    try:
-        summaries = schedule_summaries(novel_id)
-    except Exception as exc:  # summaries are an extra: never fail an ingest over them
-        summaries = {"error": str(exc)}
+    results = _ingest_chapters(
+        novel_id, chapters, extract_entities, _furthest_reader(novel_id),
+        report=lambda meta: self.update_state(state="INGESTING", meta=meta))
+    # the rest of the summaries, for wherever readers are now (they may have moved meanwhile)
+    summaries = _schedule_quietly(novel_id)
 
     return {
         "status": "complete",
@@ -350,6 +364,38 @@ def ingest_from_source(self, source_data: dict):
         "chapters_succeeded": sum(1 for r in results if r["status"] == "complete"),
         "summaries": summaries,
     }
+
+
+def _ingest_chapters(novel_id: int, chapters: list[dict], extract_entities: bool = False,
+                     reader_chapter: int = 0, report=None) -> list[dict]:
+    """Index chapters in reading order, EMBED_GROUP chapters' chunks per embedding call. Each
+    chapter is searchable as soon as it is stored, so a reader can ask about the chapters they
+    have read long before the rest of the book is in. Summaries start then too, rather than
+    after the whole book."""
+    results, summaries_started = [], False
+    for start in range(0, len(chapters), EMBED_GROUP):
+        group = chapters[start:start + EMBED_GROUP]
+        prepared = [_chapter_chunks(ch["content"]) for ch in group]
+        vectors = iter(_embed([c for _, chunks in prepared for c in chunks]))
+        for chapter, (text, chunks) in zip(group, prepared, strict=True):
+            chapter["novel_id"] = novel_id
+            results.append(_process_chapter(chapter, extract_entities, chunked=(text, chunks),
+                                            embeddings=[next(vectors) for _ in chunks]))
+        searchable_up_to = group[-1]["number"]
+        if report:
+            report({"novel_id": novel_id, "total_chapters": len(chapters),
+                    "processed": len(results), "searchable_up_to": searchable_up_to})
+        if not summaries_started and searchable_up_to >= reader_chapter:
+            summaries_started = True
+            _schedule_quietly(novel_id, reader_chapter)
+    return results
+
+
+def _schedule_quietly(novel_id: int, reader_chapter: int | None = None) -> dict:
+    try:
+        return schedule_summaries(novel_id, reader_chapter=reader_chapter)
+    except Exception as exc:  # summaries are an extra: never fail an ingest over them
+        return {"error": str(exc)}
 
 
 # --- Chapter summaries ---------------------------------------------------------------
@@ -406,11 +452,15 @@ def schedule_summaries(novel_id: int, reader_chapter: int | None = None,
                        up_to: int | None = None) -> dict:
     """Queue summaries for the chapters readers can use: up to the furthest reader (or
     `reader_chapter`) plus SUMMARY_LOOKAHEAD, or up to `up_to` when given."""
+    if reader_chapter is None:
+        reader_chapter = _furthest_reader(novel_id)
     if up_to is None:
-        if reader_chapter is None:
-            reader_chapter = _furthest_reader(novel_id)
         up_to = reader_chapter + SUMMARY_LOOKAHEAD
     missing = _chapters_without_summaries(novel_id, up_to, _summary_version())
+    # newest first back from the reader, so "catch me up on the last chapters" works first;
+    # chapters past the reader after that, in order
+    missing = (sorted((n for n in missing if n <= reader_chapter), reverse=True)
+               + [n for n in missing if n > reader_chapter])
     key = _pending_key(novel_id)
     # SADD reports whether each chapter was new, so two schedules racing (readers updating
     # progress at once) cannot both queue the same chapter
@@ -460,16 +510,20 @@ def _stem(word: str) -> str:
     return word
 
 
+_HEADING_WORDS = ("Chapter", "Part", "Summary")
+
+
 def _unverified_names(summary: str, title: str, text: str) -> list[str]:
     """Capitalized words in a summary that its chapter (title included) never uses, in any
     form. A summary should name only what its chapter does, so these may come from the
     model's memory of the book: that is how a summary could carry a spoiler. Words opening a
-    sentence are skipped (they are capitalized anyway), and plurals and possessives match
-    their stem."""
+    sentence are skipped (they are capitalized anyway), as are the words of the headings the
+    model writes ("Chapter 12 Summary (Part 1 of 2):"); plurals and possessives match their
+    stem."""
     vocabulary = {_stem(w) for w in re.findall(r"[A-Za-z']+", f"{title} {text}")}
     flagged = set()
     for match in re.finditer(r"\b[A-Z][a-z]{2,}\b", summary):
-        if _OPENS_SENTENCE.search(summary[:match.start()]) or match.group() == "Chapter":
+        if _OPENS_SENTENCE.search(summary[:match.start()]) or match.group() in _HEADING_WORDS:
             continue
         if _stem(match.group()) not in vocabulary:
             flagged.add(match.group())

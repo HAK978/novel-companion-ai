@@ -104,6 +104,10 @@ export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurren
             setIngestStatus('Failed.')
             setIngesting(false)
             clearInterval(poll)
+          } else if (s.meta?.searchable_up_to) {
+            // chapters are searchable as they are indexed, in reading order
+            setIngestStatus(`Indexed ${s.meta.processed} of ${s.meta.total_chapters} chapters. ` +
+              `You can already ask about chapters up to ${s.meta.searchable_up_to}.`)
           } else {
             setIngestStatus(`Processing... (${s.status})`)
           }

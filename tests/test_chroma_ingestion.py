@@ -48,6 +48,7 @@ def ingest(ingestion_tasks, tmp_path, monkeypatch):
         return sorted(got["documents"])
 
     _ingest.stored = stored
+    _ingest.client = client
     return _ingest
 
 
@@ -84,6 +85,32 @@ def test_a_chapter_that_now_cleans_to_nothing_loses_its_old_chunks(ingest):
 
     assert ingest(7, 0)["status"] == "skipped"
     assert ingest.stored(7) == []
+
+
+def test_chapters_embedded_in_groups_match_chapters_embedded_alone(ingestion_tasks, ingest,
+                                                                   monkeypatch):
+    # bulk ingestion embeds many chapters' chunks per call and hands Chroma the vectors; they
+    # must land on the same ids as when the collection embeds each chapter itself
+    monkeypatch.setattr(ingestion_tasks, "_embedder", FakeEmbedding())
+    monkeypatch.setattr(ingestion_tasks, "EMBED_GROUP", 2)
+    monkeypatch.setattr(ingestion_tasks, "_schedule_quietly", lambda *args, **kwargs: {})
+    chapters = [{"number": n, "title": f"Chapter {n}",
+                 "content": "<p>" + " ".join(f"w{n}_{i}." for i in range(900)) + "</p>"}
+                for n in (1, 2, 3)]
+
+    ingestion_tasks._ingest_chapters(1, [dict(ch) for ch in chapters])
+    for ch in chapters:
+        ingestion_tasks._process_chapter({**ch, "novel_id": 2})
+
+    def stored(novel_id):
+        got = ingest.client.get_collection(f"novel_{novel_id}").get(
+            include=["documents", "embeddings"])
+        return {i: (doc, list(vector)) for i, doc, vector
+                in zip(got["ids"], got["documents"], got["embeddings"], strict=True)}
+
+    grouped = stored(1)
+    assert len(grouped) > 3  # several chunks per chapter
+    assert grouped == stored(2)
 
 
 def test_a_chapter_without_a_novel_is_rejected(ingestion_tasks):

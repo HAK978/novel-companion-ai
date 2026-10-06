@@ -13,12 +13,14 @@ scoped to the reader's progress.
   /health (aggregated).
 - **Ingestion** (8001) — `services/ingestion/`. Celery tasks (`tasks.py`, core logic in
   `_process_chapter()`): clean HTML → chunk (~400 words, sentence-boundary, `chunking.py`)
-  → embed (sentence-transformers all-MiniLM-L6-v2) → store in ChromaDB → chapter record in
+  → embed (all-MiniLM-L6-v2, Chroma's ONNX build; bulk ingests embed 32 chapters per call in
+  `_ingest_chapters()`) → store in ChromaDB → chapter record in
   PostgreSQL → optional entity extraction via generation service. Source adapters in
   `adapters/` (local_json handles nested dirs via rglob, epub). Chapter summaries: the
   `summary-worker` (Celery queue `summaries`) writes one per chapter through generation's
-  `/chapter-summary`, up to the furthest reader + `SUMMARY_LOOKAHEAD` (100); scheduled after
-  each ingest and on every progress update (`POST /summaries`, `GET /summaries/{novel_id}`).
+  `/chapter-summary`, up to the furthest reader + `SUMMARY_LOOKAHEAD` (100), newest first back
+  from the reader, then ahead. Scheduled as soon as an ingest has indexed the reader's chapter,
+  again when it ends, and on every progress update (`POST /summaries`, `GET /summaries/{novel_id}`).
 - **Retrieval** (8002) — `services/retrieval/`. ChromaDB similarity search with spoiler
   filter `chapter_number <= current_chapter`, optional `min_chapter` floor, adaptive
   n_results, character lookup from PostgreSQL.
@@ -55,7 +57,10 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   in flight (`SUMMARY_PARALLEL`; 8 was ~2.4 s). After changing the name check:
   `docker compose exec ingestion python -c "from tasks import recheck_summary_flags as r; print(r(N))"`.
 - **Bulk ingest:** POST /ingest/from-source with `extract_entities: false` (default) and a
-  `source_path` under `/novels` (host `NOVEL_DATA_DIR`). ~1s/chapter; extraction ~20s/chapter.
+  `source_path` under `/novels` (host `NOVEL_DATA_DIR`). ~0.12 s/chapter (300 chapters in 35 s:
+  embedding ~80 ms, Chroma writes ~45 ms; one chapter per embedding call took 52.6 s), so a
+  3,000-chapter book is ~6 min. Chapters are searchable as they land; the task's progress meta
+  has `searchable_up_to`, which the web UI shows. Extraction ~20s/chapter.
 - **End-to-end tests:** run in a separate project so the dev data stays out:
   `NOVEL_DATA_DIR=<dir> docker compose -p novel-e2e -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait`,
   then `RUN_INTEGRATION=1 NOVEL_DATA_DIR=<dir> pytest -m integration` (stop the dev stack
@@ -121,12 +126,26 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   in flight, and two tasks could summarize the same chapters. Chapters waiting for a summary
   are tracked in Redis (`summaries:pending:<novel>`) so repeated scheduling adds no duplicates.
 - Summaries record names their chapter (title included) never mentions (`unverified_names`):
-  possible additions from the model's memory of the book. On Shadow Slave 1-1391 it flagged 46
-  of 1,390: one real leak (chapter 33's summary used "Underworld", first in the book at chapter
-  250), four invented names ("Cassandra", "Fawkes"), and 41 harmless (book knowledge from
-  earlier chapters, heading words like "Summary"). Checking against the book up to the chapter
-  instead (a per-novel index of where each word first appears) would leave 6 flags with all 5
-  real ones, and would also answer "is this name in what I've read?".
+  possible additions from the model's memory of the book. Heading words ("Chapter 12 Summary
+  (Part 1 of 2)") are ignored. On Shadow Slave 1-1391 it flags 35 of 1,390: one real leak
+  (chapter 33's summary used "Underworld", first in the book at chapter 250), four words the
+  book never uses ("Cassandra", "Fawkes", "Sightless", "Transcender"), and 30 harmless (names
+  from earlier chapters). The Hound: 6 of 15, including an invented name (chapter 11 calls Mr.
+  Frankland "Captain John Sebastian Morland Frankland") and the book's title in chapter 1's
+  summary. Checking against the book up to the chapter instead (a per-novel index of where each
+  word first appears) would leave 6 and 3 flags with every real one (the extra Shadow Slave flag
+  is "Antarctic" against the text's "Antarctica"), and would also answer "is this name in what
+  I've read?".
+- **Chapter summaries get who-did-what wrong about 1 time in 5.** Read against their chapters:
+  Shadow Slave 19 of 25 accurate, the 5 wrong ones mostly crediting an event to the wrong
+  character; the Hound has the same errors. Use them for recaps and for finding where something
+  happened, not as the only source for a specific answer. Long chapters are summarized in
+  sections of at most 2,500 words: in one pass, 3,500-word chapters lost their endings.
+- **Chunks are longer than the embedding model reads.** `CHUNK_SIZE` is 400 words (~500
+  tokens); all-MiniLM-L6-v2 reads the first 256 tokens and ignores the rest. Measured on Shadow
+  Slave 1-64: 89% of chunks are cut, so vector search sees ~54% of the text (replacing a chunk's
+  tail leaves its vector unchanged). The model answering still gets whole chunks. Changing it
+  means re-ingesting; measure retrieval with the eval set first.
 - **Shadow Slave's index predates the paragraph-spacing fix in `clean_html`**: its chunks glue
   paragraphs ("himself.After", ~6 per chunk) and each chapter's title to its first word
   ("Turf WarCaster"). The Hound's index is clean. Re-ingest Shadow Slave to fix (CPU only).

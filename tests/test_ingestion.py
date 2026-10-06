@@ -78,8 +78,9 @@ class FakeCollection:
         self.added = []
         self.deleted = []
 
-    def upsert(self, documents, metadatas, ids):
-        self.added.append({"documents": documents, "metadatas": metadatas, "ids": ids})
+    def upsert(self, documents, metadatas, ids, embeddings=None):
+        self.added.append({"documents": documents, "metadatas": metadatas, "ids": ids,
+                           "embeddings": embeddings})
 
     def delete(self, where):
         self.deleted.append(where)
@@ -168,6 +169,77 @@ def test_empty_chapter_is_skipped(ingestion_tasks, pipeline):
     assert result["status"] == "skipped"
 
 
+# --- ingesting a whole book ---
+
+def book(*numbers):
+    # ~900 words each: several chunks per chapter
+    return [{"number": n, "title": f"Chapter {n}",
+             "content": "<p>" + f"Chapter {n} goes on and on. " * 150 + "</p>"} for n in numbers]
+
+
+@pytest.fixture
+def grouped(ingestion_tasks, pipeline, monkeypatch):
+    """Two chapters per embedding call, with a stand-in model whose vector for a text is the
+    text itself, so each stored chunk shows where its vector came from. Records each
+    embedding call, and which chapters were stored when summaries were scheduled."""
+    collection, _ = pipeline
+    embed_calls, scheduled = [], []
+
+    def embed(texts):
+        embed_calls.append(texts)
+        return [("vector of", t) for t in texts]
+
+    def schedule(novel_id, reader_chapter=None):
+        stored = {m["chapter_number"] for u in collection.added for m in u["metadatas"]}
+        scheduled.append({"reader": reader_chapter, "stored": sorted(stored)})
+
+    monkeypatch.setattr(ingestion_tasks, "EMBED_GROUP", 2)
+    monkeypatch.setattr(ingestion_tasks, "_embed", embed)
+    monkeypatch.setattr(ingestion_tasks, "_schedule_quietly", schedule)
+    return collection, embed_calls, scheduled
+
+
+def test_chapters_are_embedded_a_group_at_a_time(ingestion_tasks, grouped):
+    _, embed_calls, _ = grouped
+
+    ingestion_tasks._ingest_chapters(1, book(1, 2, 3))
+
+    # chapters 1-2 in one call, then chapter 3: not one call per chapter
+    assert len(embed_calls) == 2
+
+
+def test_every_chunk_is_stored_with_its_own_vector(ingestion_tasks, grouped):
+    collection, _, _ = grouped
+
+    ingestion_tasks._ingest_chapters(1, book(1, 2, 3))
+
+    assert {m["chapter_number"] for u in collection.added for m in u["metadatas"]} == {1, 2, 3}
+    for upsert in collection.added:
+        assert upsert["embeddings"] == [("vector of", d) for d in upsert["documents"]]
+
+
+def test_progress_says_how_far_the_book_is_searchable(ingestion_tasks, grouped):
+    reports = []
+
+    ingestion_tasks._ingest_chapters(1, book(1, 2, 3), report=reports.append)
+
+    assert [(r["processed"], r["searchable_up_to"], r["total_chapters"]) for r in reports] == [
+        (2, 2, 3), (3, 3, 3)]
+
+
+@pytest.mark.parametrize("reader,stored_when_scheduled", [
+    (3, [1, 2, 3, 4]),  # as soon as the reader's chapter is in, not after the whole book
+    (0, [1, 2]),  # a reader who has not started: from the first chapters
+])
+def test_summaries_start_once_the_readers_chapters_are_in(ingestion_tasks, grouped, reader,
+                                                          stored_when_scheduled):
+    _, _, scheduled = grouped
+
+    ingestion_tasks._ingest_chapters(1, book(1, 2, 3, 4, 5, 6), reader_chapter=reader)
+
+    assert scheduled == [{"reader": reader, "stored": stored_when_scheduled}]
+
+
 # --- checking chapter summaries ---
 
 @pytest.mark.parametrize("summary,title,text,flagged", [
@@ -182,6 +254,8 @@ def test_empty_chapter_is_skipped(ingestion_tasks, pipeline):
     ("Sunny counts his Memories.", "", "sunny earned a memory", []),
     # markdown headings and list numbers still open a sentence
     ("**Summary:** Sunny rests.\n1. Despite everything, he wins.", "", "sunny rested and won", []),
+    # nor are the words of the headings the model writes
+    ("**Chapter 12 Summary (Part 1 of 2):** Watson waits.", "", "watson waited", []),
 ])
 def test_summary_names_are_checked_against_the_chapter(ingestion_tasks, summary, title, text,
                                                        flagged):
