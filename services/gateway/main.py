@@ -1,4 +1,5 @@
 import asyncio
+import re
 from datetime import UTC, datetime
 
 import httpx
@@ -301,22 +302,49 @@ async def _generate_checked(client, payload: dict, novel_id: int, said: str) -> 
     return data, "withheld"
 
 
+# Questions about what happened lately, answered from chapter summaries rather than search
+_RECENT = re.compile(
+    r"\b(recently|lately|so far|recap|catch me up|last (?:few |couple of |(\d+) )?chapters?|"
+    r"(?:just|recently) happened|what (?:just )?happened (?:recently|lately|last))\b", re.I)
+RECENT_CHAPTERS = 10
+
+
+def _recent_range(question: str, chapter: int) -> tuple[int, int] | None:
+    """The chapters a recent-events question is about: the last N before the reader's, N as
+    asked ("the last 5 chapters") or 10."""
+    match = _RECENT.search(question)
+    if not match:
+        return None
+    count = min(int(match.group(2)) if match.group(2) else RECENT_CHAPTERS,
+                RECAP_FROM_SUMMARIES_MAX)
+    return max(1, chapter - count + 1), chapter
+
+
 @app.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest):
     collection_name = f"novel_{request.novel_id}"
 
+    recent = _recent_range(request.query, request.current_chapter)
+    stored = (await run_in_threadpool(_chapter_summaries, request.novel_id, *recent)
+              if recent else [])
     async with httpx.AsyncClient(timeout=120) as client:
-        retrieval_resp = await client.post(
-            f"{RETRIEVAL_SERVICE_URL}/search",
-            json={
-                "query": request.query,
-                "current_chapter": request.current_chapter,
-                "n_results": request.n_results,
-                "collection_name": collection_name,
-            },
-        )
-        retrieval_data = retrieval_resp.json()
-        results = retrieval_data.get("results", [])
+        if stored:
+            # a question about recent events: search has no sense of time (asked at chapter
+            # 1291 it described chapters 527 and 398 as "the last few"), so read the summaries
+            # of the chapters just before the reader's, in order
+            results = [{"text": summary, "chapter_number": n, "chapter_title": title,
+                        "relevance_score": 1.0} for n, title, summary in stored]
+        else:
+            retrieval_resp = await client.post(
+                f"{RETRIEVAL_SERVICE_URL}/search",
+                json={
+                    "query": request.query,
+                    "current_chapter": request.current_chapter,
+                    "n_results": request.n_results,
+                    "collection_name": collection_name,
+                },
+            )
+            results = retrieval_resp.json().get("results", [])
 
         if not results:
             return QueryResponse(answer=None, sources=[])

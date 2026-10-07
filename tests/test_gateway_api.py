@@ -521,3 +521,29 @@ def test_a_recap_reads_every_chapters_summary_when_all_exist(client, wire, gatew
         f"[Chapter {n}: Chapter {n}]\nSummary {n}." for n in (10, 11, 12)]
     assert not any("/search" in c["url"] for c in calls)
     assert body["source"] == "chapter summaries"
+
+
+@pytest.mark.parametrize("question,expected", [
+    ("What happened in the last few chapters?", (1282, 1291)),
+    ("Catch me up", (1282, 1291)),
+    ("What happened recently with Nephis?", (1282, 1291)),
+    ("Summarize the last 5 chapters", (1287, 1291)),
+    ("Who is Nephis?", None),
+    ("What happened at the Dark City?", None),
+])
+def test_questions_about_recent_events_are_recognized(gateway_main, question, expected):
+    assert gateway_main._recent_range(question, 1291) == expected
+
+
+def test_recent_events_are_answered_from_chapter_summaries(client, wire, gateway_main,
+                                                          monkeypatch):
+    # search has no sense of time: at chapter 1291 it offered chapters 527 and 398 as recent
+    calls, _ = wire({"/generate": GENERATED})
+    monkeypatch.setattr(gateway_main, "_chapter_summaries", lambda novel_id, s, e: [
+        (n, f"Chapter {n}", f"Summary {n}.") for n in range(s, e + 1)])
+
+    body = client.post("/query", json={"query": "What happened in the last 3 chapters?",
+                                       "novel_id": 3, "current_chapter": 1291}).json()
+
+    assert not any("/search" in c["url"] for c in calls)
+    assert [s["chapter_number"] for s in body["sources"]] == [1289, 1290, 1291]
