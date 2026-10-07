@@ -504,3 +504,20 @@ def test_summaries_are_checked_before_they_are_cached(client, wire):
 
     cached = next(s for s in engine.statements if "INSERT INTO range_summaries" in s["sql"])
     assert body["summary"] == cached["params"]["sum"] == "She is his wife, Beryl."
+
+
+def test_a_recap_reads_every_chapters_summary_when_all_exist(client, wire, gateway_main,
+                                                            monkeypatch):
+    # ten search hits covered a few moments of a range; the stored summaries cover all of it
+    calls, _ = wire({"/generate": GENERATED})
+    monkeypatch.setattr(gateway_main, "_chapter_summaries", lambda novel_id, s, e: [
+        (n, f"Chapter {n}", f"Summary {n}.") for n in range(s, e + 1)])
+
+    body = client.post("/summarize", json={"novel_id": 3, "start_chapter": 10,
+                                           "end_chapter": 12}).json()
+
+    generate = next(c for c in calls if "/generate" in c["url"])
+    assert generate["payload"]["context_chunks"] == [
+        f"[Chapter {n}: Chapter {n}]\nSummary {n}." for n in (10, 11, 12)]
+    assert not any("/search" in c["url"] for c in calls)
+    assert body["source"] == "chapter summaries"

@@ -370,6 +370,30 @@ class CatchMeUpRequest(BaseModel):
     user_id: str = "default"
 
 
+# A range recap reads every chapter's stored summary when all of them exist: ~120 words each,
+# so 60 chapters stay well inside the model's context. Wider ranges search instead, for now.
+RECAP_FROM_SUMMARIES_MAX = 60
+
+
+def _chapter_summaries(novel_id: int, start: int, end: int) -> list[tuple[int, str, str]]:
+    """(chapter, title, summary) for every ingested chapter in the range, or [] if any lacks
+    a summary or the range is too wide."""
+    if end - start + 1 > RECAP_FROM_SUMMARIES_MAX:
+        return []
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT c.chapter_number, c.title, s.summary
+            FROM chapters c LEFT JOIN chapter_summaries s
+              ON s.novel_id = c.novel_id AND s.chapter_number = c.chapter_number
+            WHERE c.novel_id = :nid AND c.chapter_number BETWEEN :s AND :e
+              AND c.ingestion_status = 'complete'
+            ORDER BY c.chapter_number
+        """), {"nid": novel_id, "s": start, "e": end}).fetchall()
+    if not rows or any(r[2] is None for r in rows):
+        return []
+    return [(r[0], r[1] or "", r[2]) for r in rows]
+
+
 @app.post("/summarize")
 async def summarize(request: SummarizeRequest):
     reader_at = request.current_chapter or request.end_chapter
@@ -407,24 +431,33 @@ async def summarize(request: SummarizeRequest):
             "cached": True,
         }
 
+    stored = await run_in_threadpool(_chapter_summaries, request.novel_id,
+                                     request.start_chapter, end_ch)
     collection_name = f"novel_{request.novel_id}"
     async with httpx.AsyncClient(timeout=120) as client:
-        retrieval_resp = await client.post(
-            f"{RETRIEVAL_SERVICE_URL}/search",
-            json={
-                "query": f"summary of events in chapters {request.start_chapter} to {end_ch}",
-                "current_chapter": end_ch,
-                "n_results": 10,
-                "collection_name": collection_name,
-                # floor the search to the requested range; without it,
-                # similar chunks from much earlier arcs pollute the summary
-                "min_chapter": request.start_chapter,
-            },
-        )
-        results = retrieval_resp.json().get("results", [])
-
-        if not results:
-            return {"error": "No content found for this chapter range"}
+        if stored:
+            # every chapter of the range, in order: ten search hits covered a few moments of it
+            source = "chapter summaries"
+            context = [f"[Chapter {n}: {title}]\n{text}" for n, title, text in stored]
+        else:
+            source = "passages"
+            retrieval_resp = await client.post(
+                f"{RETRIEVAL_SERVICE_URL}/search",
+                json={
+                    "query": f"summary of events in chapters {request.start_chapter} to {end_ch}",
+                    "current_chapter": end_ch,
+                    "n_results": 10,
+                    "collection_name": collection_name,
+                    # floor the search to the requested range; without it,
+                    # similar chunks from much earlier arcs pollute the summary
+                    "min_chapter": request.start_chapter,
+                },
+            )
+            results = retrieval_resp.json().get("results", [])
+            if not results:
+                return {"error": "No content found for this chapter range"}
+            context = [f"[Chapter {r['chapter_number']}: {r.get('chapter_title', '')}]\n{r['text']}"
+                       for r in results]
 
         # A failed generation is a failure, not a summary: it raises, and is never cached.
         gen_data, _ = await _generate_checked(client, {
@@ -433,10 +466,7 @@ async def summarize(request: SummarizeRequest):
                 f"from chapters {request.start_chapter} to {end_ch}. "
                 f"Be comprehensive but concise."
             ),
-            "context_chunks": [
-                f"[Chapter {r['chapter_number']}: {r.get('chapter_title', '')}]\n{r['text']}"
-                for r in results
-            ],
+            "context_chunks": context,
             "current_chapter": end_ch,
         }, request.novel_id, said="")
 
@@ -463,6 +493,7 @@ async def summarize(request: SummarizeRequest):
         "start_chapter": request.start_chapter,
         "end_chapter": end_ch,
         "cached": False,
+        "source": source,
     }
 
 
