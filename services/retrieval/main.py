@@ -1,6 +1,6 @@
 from config import DATABASE_URL
 from fastapi import FastAPI
-from names import withhold
+from names import capitalized_mid_sentence, withhold
 from pydantic import BaseModel, Field
 from search import delete_collection, search_chunks
 from sqlalchemy import create_engine
@@ -182,6 +182,11 @@ class WithholdRequest(BaseModel):
     text: str
     # what the reader wrote (their question): repeating their own words back is no leak
     ignore: str = ""
+    # for model-written summaries: also take out capitalized words opening no sentence that
+    # the book first uses later, even if it also writes them in lowercase. Chapter 33's summary
+    # said "exploring the Underworld", first in the book at chapter 250 and in lowercase at
+    # 254, so the names-only check let it through
+    strict: bool = False
 
 
 @app.post("/withhold-unread-names")
@@ -191,24 +196,32 @@ def withhold_unread_names(request: WithholdRequest):
     even when every passage it was given comes from chapters the reader has read: at chapter
     14 of the Hound it called Stapleton's wife "Beryl Garcia", a name the book first uses in
     chapter 15. `withheld` counts the names taken out (never listed: they are the spoiler)."""
-    ignore = {stem(w) for w in WORD.findall(request.ignore)}
     capitalized = {stem(w) for w in CAPITALIZED.findall(request.text)}
-    names: dict[str, int] = {}  # the capitalized words that are names: first chapter
-    if capitalized:
-        with engine.connect() as conn:
-            names = dict(conn.execute(
-                sa_text("""
-                    SELECT word, first_chapter FROM book_words
-                    WHERE novel_id = :nid AND word = ANY(:words)
-                      AND first_lowercase_chapter IS NULL
-                """),
-                {"nid": request.novel_id, "words": sorted(capitalized)},
-            ).all())
-    unread = {w for w, first in names.items()
-              if first > request.current_chapter and w not in ignore}
+    if not capitalized:
+        return {"text": request.text, "withheld": 0}
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sa_text("""
+                SELECT word, first_chapter, first_lowercase_chapter FROM book_words
+                WHERE novel_id = :nid AND word = ANY(:words)
+            """),
+            {"nid": request.novel_id, "words": sorted(capitalized)},
+        ).all()
+        title = conn.execute(sa_text("SELECT title FROM novels WHERE id = :nid"),
+                             {"nid": request.novel_id}).scalar() or ""
+    # the reader's own words, and the book's title, which every reader knows
+    ignore = {stem(w) for w in WORD.findall(f"{request.ignore} {title}")}
+    first = {w: chapter for w, chapter, _ in rows}
+    # words the book only ever capitalizes are names
+    names = {w for w, _, lowercase in rows if lowercase is None}
+    later = {w for w, chapter in first.items()
+             if chapter > request.current_chapter and w not in ignore}
+    unread = later & names
+    if request.strict:
+        unread |= later & capitalized_mid_sentence(request.text)
     if not unread:
         return {"text": request.text, "withheld": 0}
-    return {"text": withhold(request.text, unread, set(names)), "withheld": len(unread)}
+    return {"text": withhold(request.text, unread, names), "withheld": len(unread)}
 
 
 @app.post("/delete-collection")

@@ -547,3 +547,43 @@ def test_recent_events_are_answered_from_chapter_summaries(client, wire, gateway
 
     assert not any("/search" in c["url"] for c in calls)
     assert [s["chapter_number"] for s in body["sources"]] == [1289, 1290, 1291]
+
+
+
+def without_underworld(payload):
+    """A spoiler check that takes "the Underworld" (first in the book after the reader's
+    chapter) out of summaries checked strictly."""
+    text = payload["text"]
+    if payload.get("strict") and "Underworld" in text:
+        return {"text": text.replace(" Sunny explores the Underworld.", ""), "withheld": 1}
+    return {"text": text, "withheld": 0}
+
+
+def stored_summaries(n_from, n_to):
+    return lambda novel_id, s, e: [(n, f"Chapter {n}", f"Summary {n}." + (
+        " Sunny explores the Underworld." if n == 33 else "")) for n in range(s, e + 1)]
+
+
+def test_recap_sources_never_carry_what_the_reader_has_not_reached(client, wire, gateway_main,
+                                                                 monkeypatch):
+    # summaries were returned as sources unfiltered; only the answer was checked
+    calls, _ = wire({"/generate": GENERATED, "/withhold-unread-names": without_underworld})
+    monkeypatch.setattr(gateway_main, "_chapter_summaries", stored_summaries(31, 35))
+
+    body = client.post("/query", json={"query": "What happened in the last 5 chapters?",
+                                       "novel_id": 3, "current_chapter": 35}).json()
+
+    generate = next(c for c in calls if "/generate" in c["url"])
+    assert not any("Underworld" in chunk for chunk in generate["payload"]["context_chunks"])
+    assert not any("Underworld" in s["text"] for s in body["sources"])
+    assert body["spoiler_check"] == "withheld"
+
+
+def test_range_recaps_check_their_summaries_too(client, wire, gateway_main, monkeypatch):
+    calls, _ = wire({"/generate": GENERATED, "/withhold-unread-names": without_underworld})
+    monkeypatch.setattr(gateway_main, "_chapter_summaries", stored_summaries(31, 35))
+
+    client.post("/summarize", json={"novel_id": 3, "start_chapter": 31, "end_chapter": 35})
+
+    generate = next(c for c in calls if "/generate" in c["url"])
+    assert not any("Underworld" in chunk for chunk in generate["payload"]["context_chunks"])

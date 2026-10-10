@@ -65,8 +65,8 @@ class QueryResponse(BaseModel):
     answer: str | None
     model_used: str = "none"
     sources: list[ChunkResult]
-    # "withheld" when the answer named someone the reader has not reached and the name was
-    # taken out; never which name, since that would be the spoiler
+    # "withheld" when the answer, or a chapter summary it drew on, named something the reader
+    # has not reached and it was taken out; never what, since that would be the spoiler
     spoiler_check: str = "clean"
 
 
@@ -320,6 +320,26 @@ def _recent_range(question: str, chapter: int) -> tuple[int, int] | None:
     return max(1, chapter - count + 1), chapter
 
 
+async def _withheld_summaries(client, novel_id: int, chapter: int, stored: list, said: str
+                              ) -> tuple[list[tuple[int, str, str]], int]:
+    """Chapter summaries with what the reader has not reached taken out, before they reach the
+    model or the response. A summary can name something the book only introduces later (its
+    model knows the book): chapter 33's said "the Underworld", first in the book at chapter
+    250. Returns the summaries left, and how many words were withheld."""
+    async def check(summary: str) -> dict:
+        resp = await client.post(f"{RETRIEVAL_SERVICE_URL}/withhold-unread-names", json={
+            "novel_id": novel_id, "current_chapter": chapter, "text": summary,
+            "ignore": said, "strict": True})
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail="Spoiler check failed")
+        return resp.json()
+
+    checked = await asyncio.gather(*(check(summary) for _, _, summary in stored))
+    kept = [(n, title, c["text"]) for (n, title, _), c in zip(stored, checked, strict=True)
+            if c["text"].strip()]
+    return kept, sum(c.get("withheld", 0) for c in checked)
+
+
 @app.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest):
     collection_name = f"novel_{request.novel_id}"
@@ -328,10 +348,14 @@ async def query(request: QueryRequest):
     stored = (await run_in_threadpool(_chapter_summaries, request.novel_id, *recent)
               if recent else [])
     async with httpx.AsyncClient(timeout=120) as client:
+        summaries_withheld = 0
         if stored:
             # a question about recent events: search has no sense of time (asked at chapter
             # 1291 it described chapters 527 and 398 as "the last few"), so read the summaries
             # of the chapters just before the reader's, in order
+            stored, summaries_withheld = await _withheld_summaries(
+                client, request.novel_id, request.current_chapter, stored,
+                said=f"{request.query} {request.conversation_context}")
             results = [{"text": summary, "chapter_number": n, "chapter_title": title,
                         "relevance_score": 1.0} for n, title, summary in stored]
         else:
@@ -380,7 +404,7 @@ async def query(request: QueryRequest):
         answer=gen_data.get("answer"),
         model_used=gen_data.get("model_used", "none"),
         sources=results,
-        spoiler_check=check,
+        spoiler_check="withheld" if summaries_withheld else check,
     )
 
 
@@ -463,6 +487,9 @@ async def summarize(request: SummarizeRequest):
                                      request.start_chapter, end_ch)
     collection_name = f"novel_{request.novel_id}"
     async with httpx.AsyncClient(timeout=120) as client:
+        if stored:
+            stored, _ = await _withheld_summaries(client, request.novel_id, end_ch, stored,
+                                                  said="")
         if stored:
             # every chapter of the range, in order: ten search hits covered a few moments of it
             source = "chapter summaries"

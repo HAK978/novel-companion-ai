@@ -39,6 +39,8 @@ chroma-data/
 
 # Local planning notes, not part of the project
 ROADMAP.md
+# Notes passed between coding agents (Claude Code, Codex): local only
+handoff/
 
 # Local database backups and coverage data
 backups/

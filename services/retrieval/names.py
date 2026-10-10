@@ -2,11 +2,24 @@
 
 import re
 
-from words import stem
+from words import CAPITALIZED, stem
 
 _SENTENCES = re.compile(r"(?<=[.!?])\s+")
+# no letters since the last sentence end (or the start): quotes, "**" and list numbers allowed
+_OPENS_SENTENCE = re.compile(r"(^|[.!?:;\n])[^A-Za-z]*$")
+# the headings models write ("Chapter 12 Summary (Part 1 of 2):") are not the book's words
+_HEADING_WORDS = {"chapter", "part", "summary"}
 # Capitalized words in a row: one name, perhaps of several words ("Beryl Garcia", "Costa Rica")
 _NAME_RUN = re.compile(r"\b[A-Z][a-z'\u2019]*(?:\s+[A-Z][a-z'\u2019]*)*")
+
+
+def capitalized_mid_sentence(text: str) -> set[str]:
+    """Capitalized words that open no sentence, reduced: in text a model wrote, these are
+    names and terms ("exploring the Underworld") even when the book also writes them in
+    lowercase."""
+    return {stem(m.group()) for m in CAPITALIZED.finditer(text)
+            if not _OPENS_SENTENCE.search(text[:m.start()])
+            and stem(m.group()) not in _HEADING_WORDS}
 
 
 def withhold(text: str, unread: set[str], names: set[str]) -> str:

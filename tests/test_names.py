@@ -25,3 +25,15 @@ def test_unread_names_are_withheld(names, text, kept):
     book_names = unread | {"beryl", names.stem("Holmes")}  # words the book only capitalizes
 
     assert names.withhold(text, unread, book_names) == kept
+
+
+@pytest.mark.parametrize("text,found", [
+    ("Sunny is exploring the Underworld.", {"underworld"}),
+    # opening a sentence, a word is capitalized anyway: only the name mid-sentence counts
+    ("Afterward, Sunny rests. Notably, he wins.", {"sunny"}),
+    # nor are the headings a model writes the book's words
+    ("**Chapter 863 Summary:** Sunny waits.", set()),
+    ("He met Beryl Garcia's husband.", {"beryl", "garcia"}),
+])
+def test_capitalized_words_opening_no_sentence(names, text, found):
+    assert names.capitalized_mid_sentence(text) == found

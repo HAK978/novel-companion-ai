@@ -20,7 +20,9 @@ character questions are answered through search.
   `RECAP_FROM_SUMMARIES_MAX`); otherwise they search. /query sends recent-events questions
   ("recently", "catch me up", "the last N chapters": `_recent_range`) to the summaries of the
   last 10 (or N) chapters: search has no sense of time, and at chapter 1291 it offered
-  chapters 527 and 398 as "the last few".
+  chapters 527 and 398 as "the last few". Summaries pass through the strict check before they reach
+  the model or `sources` (`_withheld_summaries`): they were returned unfiltered, and only the
+  answer was checked (found by Codex's audit, `handoff/2026-10-10-codex-audit.md`).
 - **Ingestion** (8001) — `services/ingestion/`. Celery tasks (`tasks.py`, core logic in
   `_process_chapter()`): clean HTML → chunk (~400 words, sentence-boundary, `chunking.py`)
   → split each chunk into windows of ≤170 words (`split_windows`, lossless) → embed the windows
@@ -39,9 +41,12 @@ character questions are answered through search.
   (`search.py`); spoiler filter `chapter_number <= current_chapter`, optional `min_chapter`
   floor, adaptive n_results, character lookup from PostgreSQL. `/withhold-unread-names`:
   takes out of a text the names the book first uses after the reader's chapter (words it
-  never writes in lowercase, from `book_words`), ignoring the reader's own words. `names.py`:
-  from a longer name when a name is left ("his wife, Beryl Garcia" → "his wife, Beryl"),
-  otherwise the whole sentence.
+  never writes in lowercase, from `book_words`), ignoring the reader's own words and the
+  book's title. With `strict` (used for chapter summaries) it also takes out capitalized
+  words opening no sentence that the book first uses later in any case: chapter 33's summary
+  said "exploring the Underworld", a word first in the book at chapter 250 and in lowercase
+  at 254, which the names-only rule let through. `names.py`: from a longer name when a name
+  is left ("his wife, Beryl Garcia" → "his wife, Beryl"), otherwise the whole sentence.
 - **Generation** (8003) — `services/generation/`. One OpenAI-compatible client
   (`llm_client.py`) configured by `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY`; the default
   is the compose `vllm` service (`http://vllm:8000/v1`, host port 8004). No GPU code: an
@@ -203,6 +208,7 @@ summaries; the character graph through schema-constrained extraction; streaming 
 and tracing. The detailed plan is `ROADMAP.md`, local and gitignored.
 
 `AGENTS.md` points other coding agents (Codex) to this file and repeats its hard rules; keep
-the two in step.
+the two in step. Notes between agents (audits, specs, replies) live in `handoff/`, local and
+gitignored; Codex's sessions are also readable in `~/.codex/sessions/`.
 
 **Keep this file updated as work progresses** so a fresh session can resume from here.

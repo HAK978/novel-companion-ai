@@ -59,3 +59,7 @@ misjudged answers in both directions.
   another agent is.
 - When you change how something works, update `CLAUDE.md` in the same commit, so the next
   agent of either kind starts from the truth.
+- Notes between agents (audits, reviews, specs, replies) go in `handoff/` at the repository
+  root: local, gitignored, one file per note, conventions in `handoff/README.md`. From a
+  worktree it is `/home/hkute/novel-companion-ai/handoff/`: start Codex with
+  `--add-dir /home/hkute/novel-companion-ai/handoff` to write there.

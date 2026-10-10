@@ -64,9 +64,10 @@ def check(retrieval_main, db_engine, book, monkeypatch):
     book(16, "The Moor was quiet.")
     book(20, "out on the moor")
 
-    def withhold(text, chapter=14, ignore=""):
+    def withhold(text, chapter=14, ignore="", strict=False):
         body = client.post("/withhold-unread-names", json={
-            "novel_id": 1, "current_chapter": chapter, "text": text, "ignore": ignore}).json()
+            "novel_id": 1, "current_chapter": chapter, "text": text, "ignore": ignore,
+            "strict": strict}).json()
         return body["text"], body["withheld"]
     return withhold
 
@@ -94,6 +95,27 @@ def test_words_the_book_writes_in_lowercase_are_not_names(check):
 def test_names_the_book_never_uses_are_not_this_checks_business(check):
     # invented names are a different failure, flagged in summaries
     assert check("Sebastian fled.") == ("Sebastian fled.", 0)
+
+
+def test_strict_also_takes_out_later_terms_the_book_writes_in_lowercase(check, book):
+    # for summaries: chapter 33's said "exploring the Underworld", first in the book at chapter
+    # 250, in lowercase from 254, so the names-only check let it through
+    book(250, "The Underworld opened.")
+    book(254, "deep in the underworld")
+    text = "Sunny is exploring the Underworld. Beryl waits."
+
+    assert check(text, chapter=35) == (text, 0)
+    assert check(text, chapter=35, strict=True) == ("Beryl waits.", 1)
+    assert check(text, chapter=260, strict=True) == (text, 0)
+
+
+def test_the_books_title_is_known_to_every_reader(check, book, db_engine):
+    with db_engine.begin() as conn:
+        conn.execute(text("UPDATE novels SET title = 'The Hound of the Baskervilles' WHERE id = 1"))
+    book(2, "the Baskervilles of Baskerville Hall")
+    summary = "In chapter 1 of The Hound of the Baskervilles, Holmes waits."
+
+    assert check(summary, chapter=1, strict=True) == (summary, 0)
 
 
 def test_summaries_are_flagged_against_the_book_so_far(ingestion_tasks, book):
