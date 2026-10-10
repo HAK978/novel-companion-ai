@@ -42,5 +42,10 @@ misjudged answers in both directions.
 
 - Work on your own branch or git worktree, and don't edit files another agent is changing at
   the same time.
+- Never run `docker compose` from a worktree or branch checkout. The compose project name is
+  fixed (`name: novel-companion-ai`), so it would rebuild the live stack from your unmerged
+  code. Deploying is done from the main checkout after merging.
+- The database tests share one test database (`novel_companion_test`): don't run them while
+  another agent is.
 - When you change how something works, update `CLAUDE.md` in the same commit, so the next
   agent of either kind starts from the truth.
