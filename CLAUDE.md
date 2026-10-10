@@ -1,9 +1,10 @@
 # Novel Companion AI — working notes
 
 Spoiler-aware reading companion for long web novels, built as FastAPI microservices:
-Celery/Redis async ingestion into vector embeddings, entity extraction into a PostgreSQL
-relationship graph, and summarization / character recall / Q&A backed by RAG that is
-scoped to the reader's progress.
+Celery/Redis ingestion into vector embeddings, a summary of every chapter written in the
+background, and Q&A and recaps backed by RAG scoped to the reader's progress. Character
+extraction exists but is off by default, so the PostgreSQL character graph is empty and
+character questions are answered through search.
 
 ## Architecture
 
@@ -14,7 +15,12 @@ scoped to the reader's progress.
   has retrieval take out names the reader has not reached; /query reports `spoiler_check`
   ("withheld" or "clean"), never the names. Asking the model to rewrite without them was
   tried first and dropped: it kept the name in 5 of 12 tries and complying rewrites got
-  worse.
+  worse. /summarize and /catch-me-up read the stored summary of every chapter in the range,
+  in order, when all exist and the range is at most 60 chapters (`_chapter_summaries`,
+  `RECAP_FROM_SUMMARIES_MAX`); otherwise they search. /query sends recent-events questions
+  ("recently", "catch me up", "the last N chapters": `_recent_range`) to the summaries of the
+  last 10 (or N) chapters: search has no sense of time, and at chapter 1291 it offered
+  chapters 527 and 398 as "the last few".
 - **Ingestion** (8001) — `services/ingestion/`. Celery tasks (`tasks.py`, core logic in
   `_process_chapter()`): clean HTML → chunk (~400 words, sentence-boundary, `chunking.py`)
   → split each chunk into windows of ≤170 words (`split_windows`, lossless) → embed the windows
@@ -106,8 +112,10 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   sorts numerically ("2" before "10"), prefers `serial`, and rejects duplicate numbers.
 - ChromaDB clients are cached per process; per-request clients leak server FDs.
 - Chroma volume mounts at `/data`, ulimit nofile 65536, healthcheck uses bash /dev/tcp.
-- Range queries (`/summarize`, `/catch-me-up`) pass `min_chapter`; context chunks are labelled
-  `[Chapter N: title]`. Their cache (`range_summaries`) is keyed by (novel_id, start, end).
+- Range queries (`/summarize`, `/catch-me-up`) that fall back to search pass `min_chapter`;
+  context chunks are labelled `[Chapter N: title]`. Their cache (`range_summaries`) is keyed
+  by (novel_id, start, end) and outlives changes to how recaps are made: clear the table
+  after changing that, or old recaps keep being served.
 - **The prompt is part of the spoiler defense.** A model may know a famous book: at chapter
   5 of the Hound it named the culprit from memory 7/20 times until the rules went into the
   system message (0/40). Keep `system_prompt()` in `llm_client.py`.
@@ -188,7 +196,13 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
 
 ## Roadmap
 
-Evaluation harness (RAGAS metrics + deterministic spoiler-leakage check), populated character
-graph, hybrid search with reranking, SSE streaming, tracing via Langfuse/OpenTelemetry.
+Next, in order: hybrid keyword + vector search (names embed poorly, and BM25 beat vector
+search on a name-heavy question); an unknown-person check from `book_words` (asked about
+someone who never appears, the app still answers); recaps over 60 chapters from summaries of
+summaries; the character graph through schema-constrained extraction; streaming responses
+and tracing. The detailed plan is `ROADMAP.md`, local and gitignored.
+
+`AGENTS.md` points other coding agents (Codex) to this file and repeats its hard rules; keep
+the two in step.
 
 **Keep this file updated as work progresses** so a fresh session can resume from here.
