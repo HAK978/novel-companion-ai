@@ -7,6 +7,16 @@ for every agent: the architecture, how to run and test the stack, and a list of 
 each cost a bug once. This file repeats the rules that are expensive to break and says how to
 share the repository with Claude Code, which also works here.
 
+## Where the rest of the context lives
+
+- **Why things are the way they are: `git log`.** Commit messages record the problem, what was
+  measured, and what was tried and rejected. Read the history of a file before redesigning it.
+- **Experiment results:** the docstrings of `eval/experiments/*.py`.
+- **The detailed plan: `ROADMAP.md`,** local and gitignored, in the main checkout only. A git
+  worktree is a fresh checkout of committed files, so it also lacks `.env`, `data/`,
+  `eval/experiments/out/` and `frontend/node_modules` (run `npm ci` there before the frontend
+  checks).
+
 ## Rules
 
 - **Never run `docker compose down -v`.** The dev project's volumes hold the ingested novels;
