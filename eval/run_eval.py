@@ -3,38 +3,57 @@
     python eval/run_eval.py --set eval/sets/hound.jsonl --novel-id 4 \
         --source ~/novel-data/hound-of-the-baskervilles/hound.epub --source-type epub
 
-Each question goes through the gateway's /query at its reading position, as a reader's would.
-Scoring is done in code wherever it can be, because an LLM judge proved unreliable:
-  leak           every answer, whatever its category: it names someone or something the book
-                 first mentions after the reader's chapter (needs --source)
+Each item goes to the app at its reading position, as a reader's question would: through
+/query, or for recap items through the endpoint the item names (/summarize, /catch-me-up),
+with the recap written fresh rather than read from the cache. Scoring is done in code wherever
+it can be, because an LLM judge proved unreliable:
+  name leak      every answer: it names someone or something the book first mentions after
+                 the reader's chapter. LEAK or NONE FOUND, and NOT CHECKED without --source.
+                 NONE FOUND is not "no spoiler": an answer can give away a later plot point
+                 about a character the reader already knows, which no name check can see
   leak review    it matches a pattern for a reveal after the reader's chapter
                  (<set>.reveals.json): a flag for a person to check, not a verdict
-  passages safe  no retrieved passage comes from after the reader's chapter
+  sources        whether every retrieved passage comes from the reader's chapters (by chapter
+                 number), and with --source whether a source names anything unread, checked
+                 as strictly as the app checks chapter summaries
   fact, recent   CORRECT if the answer contains one of the item's key terms, otherwise
                  DECLINED if it says it cannot answer, otherwise WRONG; and whether an accepted
-                 answer or the evidence was in the retrieved text
+                 answer or the evidence was in the retrieved text. "recent" questions are about
+                 the reader's latest chapter but are not phrased as recaps
+  recap          whether the app read the chapter summaries of the expected range (routed),
+                 and which of the item's terms (people, places and events of the range) the
+                 recap mentions
   unanswerable   whether the answer says it cannot find the person (strict: an answer that
                  neither says so nor invents anything still fails)
+
+So a run is spoiler-free only once a person has read the answers it lists under "to_read"
+(the spoiler questions and the flagged answers); grades go in eval/labels/, and --labels
+counts them.
 
 Measured against hand grades (eval/labels/hound.json): key terms agreed on 59 of the 60
 answers they were written against, but on fresh answers 5 of 64 passes were wrong or only
 partly right, because a wrong answer can still contain the right name ("Selden is actually
 Sherlock Holmes in disguise"), so spot-check what passes. The name check raised no false
-alarm in 188 fresh answers; the reveal patterns were right on only 2 of 8 flags (they overfit
-the answers they were written against), so they only flag answers for review. Mistral Nemo as
-a judge agreed on leaks 30/47 and on invented people 4/10, so --judge (an LLM cross-check) is
-off by default.
+alarm in 188 fresh answers, but it found only 7 of the 21 labelled leaks, and 1 of the 13 in
+the app's own answers: the others give away plot points about what the reader already knows
+("Rodger Stapleton", or at chapter 5 "the hound is a real animal"). The reveal patterns were
+right on only 2 of 8 flags (they overfit the answers they were written against), so they only
+flag answers for review. Mistral Nemo as a judge agreed on leaks 30/47 and on invented people
+4/10, so --judge (an LLM cross-check) is off by default.
 
 --rejudge RESULTS re-scores stored answers without calling the app (--in-place rewrites that
 file, keeping stored verdicts in step with the scoring); --labels reports agreement with hand
-grades. --no-retrieval asks the model directly, as a chatbot would be
-asked. The app answers at temperature 0.3, so runs differ slightly.
+grades. --no-retrieval asks the model directly, as a chatbot would be asked. The app answers
+at temperature 0.3, so runs differ slightly. Each result records the code revision, a hash of
+the set, the model and how far the novel's chapter summaries had got.
 Results go to eval/results/<set>[-no-retrieval][-rejudge]-<timestamp>.json.
 """
 
 import argparse
+import hashlib
 import json
 import re
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -53,6 +72,14 @@ FLAGS_UNKNOWN = re.compile(
     r"not (a )?character|does(n't| not) appear|is(n't| not) mentioned|never mentioned|"
     r"no (character|one|person) (named|called)|(couldn't|could not|can't|cannot) find|"
     r"no information (about|on)", re.I)
+
+NOT_CHECKED, NONE_FOUND = "NOT CHECKED", "NONE FOUND"
+CAPITALIZED = re.compile(r"\b[A-Z][a-z]{2,}\b")
+# nothing but quotes, brackets or list marks since the last sentence end (or the start)
+OPENS_SENTENCE = re.compile(r"(^|[.!?:;\n])[^A-Za-z]*$")
+HEADING_WORDS = {"chapter", "part", "summary"}
+# /catch-me-up reads the reading position stored for a user; the eval keeps its own
+EVAL_READER = "eval"
 
 # Optional LLM judge, reasoning before the verdict
 VERDICT = "First give one sentence of reasoning. Then on a new line write only the verdict, one of: "
@@ -113,18 +140,44 @@ def judge(args, kind: str, **fields) -> str:
     return found[-1] if found else ""
 
 
-def ask_app(args, item) -> dict:
-    resp = httpx.post(f"{args.gateway}/query", timeout=300, json={
-        "query": item["question"], "novel_id": args.novel_id,
-        "current_chapter": item["current_chapter"],
-    })
+def post(args, path: str, payload: dict) -> dict:
+    resp = httpx.post(f"{args.gateway}{path}", timeout=300, json=payload)
     resp.raise_for_status()
-    body = resp.json()
-    return {"answer": body.get("answer") or "",
-            "sources": [{"chapter_number": s["chapter_number"], "text": s["text"]}
-                        for s in body.get("sources", [])],
-            # whether the app found a name the reader has not reached and rewrote the answer
-            "spoiler_check": body.get("spoiler_check")}
+    return resp.json()
+
+
+def ask_app(args, item) -> dict:
+    """Ask the app as the reader would: /query, or the recap endpoint the item names. Recaps
+    skip the cache, which holds whatever an earlier version of the code wrote."""
+    chapter = item["current_chapter"]
+    endpoint = item.get("endpoint", "query")
+    if endpoint == "summarize":
+        body = post(args, "/summarize", {
+            "novel_id": args.novel_id, "start_chapter": item["start_chapter"],
+            "end_chapter": chapter, "current_chapter": chapter, "use_cache": False})
+        return {"answer": body.get("summary") or "", "sources": [], "route": body.get("source"),
+                "recap_range": [body.get("start_chapter"), body.get("end_chapter")],
+                "error": body.get("error")}
+    if endpoint == "catch-me-up":
+        post(args, "/progress", {"novel_id": args.novel_id, "user_id": EVAL_READER,
+                                 "current_chapter": chapter})
+        body = post(args, "/catch-me-up", {"novel_id": args.novel_id, "user_id": EVAL_READER,
+                                           "use_cache": False})
+        span = body.get("summary_range") or {}
+        return {"answer": body.get("summary") or "", "sources": [], "route": body.get("source"),
+                "recap_range": [span.get("start"), span.get("end")], "error": body.get("error")}
+    body = post(args, "/query", {"query": item["question"], "novel_id": args.novel_id,
+                                 "current_chapter": chapter})
+    sources = [{"chapter_number": s["chapter_number"], "text": s["text"]}
+               for s in body.get("sources", [])]
+    chapters = sorted({s["chapter_number"] for s in sources})
+    return {"answer": body.get("answer") or "", "sources": sources,
+            # whether the app found a name the reader has not reached and withheld it
+            "spoiler_check": body.get("spoiler_check"),
+            # chapter summaries, for a question about recent events, or searched passages
+            "route": body.get("source"),
+            "recap_range": [chapters[0], chapters[-1]] if chapters else None,
+            "model_used": body.get("model_used")}
 
 
 def ask_model_directly(args, item) -> dict:
@@ -137,12 +190,14 @@ def ask_model_directly(args, item) -> dict:
         ],
     })
     resp.raise_for_status()
-    return {"answer": resp.json()["choices"][0]["message"]["content"], "sources": []}
+    return {"answer": resp.json()["choices"][0]["message"]["content"], "sources": [],
+            "model_used": args.judge_model}
 
 
-def name_index(args) -> dict[str, int] | None:
-    """First chapter of each proper name: a capitalized word the book never writes in lowercase
-    (so "However" at the start of a sentence is not mistaken for a name)."""
+def book_index(args) -> dict | None:
+    """The chapter in which the book first uses each word, to tell what a reader has not
+    reached: "names", capitalized words the book never writes in lowercase (so "However"
+    opening a sentence is not taken for a name), and "words", every word in any case."""
     if not args.source:
         return None
     sys.path.insert(0, str(ROOT / "services" / "ingestion"))
@@ -153,12 +208,27 @@ def name_index(args) -> dict[str, int] | None:
                       key=lambda c: c["number"])
     texts = [(c["number"], clean_html(c["content"])) for c in chapters]
     lower = {w for _, t in texts for w in re.findall(r"\b[a-z]+\b", t)}
-    first = {}
+    names, words = {}, {}
     for number, text in texts:
-        for word in set(re.findall(r"\b[A-Z][a-z]{2,}\b", text)):
+        for word in set(CAPITALIZED.findall(text)):
             if word.lower() not in lower:
-                first.setdefault(word, number)
-    return first
+                names.setdefault(word, number)
+        for word in set(re.findall(r"[a-z]+", text.lower())):
+            words.setdefault(word, number)
+    return {"names": names, "words": words}
+
+
+def unread_in(text: str, chapter: int, book: dict, strict: bool = False) -> list[str]:
+    """Words in `text` the book first uses after `chapter`: proper names, and when strict (as
+    the app checks chapter summaries, whose model may know a place the book has not named
+    yet) any capitalized word that does not open a sentence."""
+    found = {w for w in CAPITALIZED.findall(text) if book["names"].get(w, 0) > chapter}
+    if strict:
+        found |= {m.group() for m in CAPITALIZED.finditer(text)
+                  if m.group().lower() not in HEADING_WORDS
+                  and book["words"].get(m.group().lower(), 0) > chapter
+                  and not OPENS_SENTENCE.search(text[:m.start()])}
+    return sorted(found)
 
 
 def in_context(item, sources) -> bool:
@@ -169,22 +239,41 @@ def in_context(item, sources) -> bool:
     return any(a in context for a in short) or bool(evidence and evidence in context)
 
 
-def score(args, item, answer, sources, reveals, names) -> dict:
-    chapter = item["current_chapter"]
+def score(args, item, reply, reveals, book) -> dict:
+    """Score what the app returned for an item (`reply`, as from ask_app). `book` is the word
+    index from book_index, or None when no book was given: then nothing is checked for names,
+    and the row says NOT CHECKED rather than passing."""
+    chapter, answer, sources = item["current_chapter"], reply["answer"], reply["sources"]
     later = [r for r in reveals if r["chapter"] > chapter]
-    future_names = sorted(w for w in set(re.findall(r"\b[A-Z][a-z]{2,}\b", answer))
-                          if names and names.get(w, 0) > chapter)
     revealed = [r["fact"] for r in later
                 if r.get("pattern") and re.search(r["pattern"], answer, re.I | re.S)]
     row = {
         "id": item["id"], "category": item["category"], "current_chapter": chapter,
         "question": item["question"], "answer": answer,
         "source_chapters": sorted({s["chapter_number"] for s in sources}),
-        "passages_safe": all(s["chapter_number"] <= chapter for s in sources),
-        "leak": "LEAK" if future_names else "SAFE",
-        "future_names": future_names,
+        # by chapter number only: a chapter summary from the reader's chapters can still name
+        # something from later, which is what sources_unread looks for
+        "passages_within_progress": all(s["chapter_number"] <= chapter for s in sources),
+        "name_leak": NOT_CHECKED,
         "leak_review": revealed,
     }
+    for key in ("route", "error"):
+        if reply.get(key):
+            row[key] = reply[key]
+    if book is not None:
+        row["unread_names"] = unread_in(answer, chapter, book)
+        row["name_leak"] = "LEAK" if row["unread_names"] else NONE_FOUND
+        texts = [s["text"] for s in sources if s.get("text")]
+        if texts:
+            row["sources_unread"] = sorted({w for t in texts
+                                            for w in unread_in(t, chapter, book, strict=True)})
+    if item["category"] == "recap":
+        row["covers_found"] = [t for t in item["covers"]
+                               if re.search(r"\b" + re.escape(t), answer, re.I)]
+        row["covers_missing"] = [t for t in item["covers"] if t not in row["covers_found"]]
+        row["recap_range"] = reply.get("recap_range")
+        row["routed"] = (reply.get("route") == "chapter summaries"
+                         and row["recap_range"] == item["expected_range"])
     if item.get("key_terms"):
         if any(re.search(re.escape(k), answer, re.I) for k in item["key_terms"]):
             row["correct"] = "CORRECT"
@@ -212,18 +301,29 @@ def summarize(rows) -> dict:
     def count(rs, key, value):
         return sum(r.get(key) == value for r in rs)
 
-    out = {"overall": {
-        "items": len(rows),
-        "passages_safe": sum(r["passages_safe"] for r in rows),
-        "answers_leaking": count(rows, "leak", "LEAK"),
-        "answers_to_review": sum(bool(r.get("leak_review")) for r in rows),
-    }}
-    checked = [r["spoiler_check"] for r in rows if r.get("spoiler_check")]
-    if checked:
-        out["overall"]["rewritten_by_name_check"] = sum(c != "clean" for c in checked)
+    checked = any(r["name_leak"] != NOT_CHECKED for r in rows)
+
+    def name_leaks(rs):
+        return count(rs, "name_leak", "LEAK") if checked else NOT_CHECKED
+
+    out = {"overall": {"items": len(rows)}}
     timed = sorted(r["seconds"] for r in rows if r.get("seconds") is not None)
     if timed:
         out["overall"]["median_seconds"] = timed[len(timed) // 2]
+    out["spoilers"] = {
+        "passages_within_progress": sum(r["passages_within_progress"] for r in rows),
+        "sources_naming_unread": (sum(bool(r.get("sources_unread")) for r in rows)
+                                  if checked else NOT_CHECKED),
+        "answers_naming_unread": name_leaks(rows),
+        # what no name check sees: a later plot point about someone the reader knows
+        "plot_leaks": "not checked in code: read the answers in to_read",
+        "flagged_for_review": [r["id"] for r in rows if r.get("leak_review")],
+        "to_read": [r["id"] for r in rows
+                    if r["category"] == "spoiler" or r.get("leak_review")],
+    }
+    by_app = [r["spoiler_check"] for r in rows if r.get("spoiler_check")]
+    if by_app:
+        out["spoilers"]["withheld_by_the_app"] = sum(c != "clean" for c in by_app)
     for cat in ("fact", "recent"):
         rs = [r for r in rows if r["category"] == cat]
         if rs:
@@ -235,32 +335,75 @@ def summarize(rows) -> dict:
                 out[cat]["answer_in_context"] = sum(ctx)
     rs = [r for r in rows if r["category"] == "spoiler"]
     if rs:
-        out["spoiler"] = {"items": len(rs), "leaked": count(rs, "leak", "LEAK")}
+        out["spoiler"] = {"items": len(rs), "name_leaks": name_leaks(rs),
+                          "flagged_for_review": sum(bool(r.get("leak_review")) for r in rs)}
     rs = [r for r in rows if r["category"] == "unanswerable"]
     if rs:
         out["unanswerable"] = {"items": len(rs),
                                "flags_unknown": sum(r["flags_unknown"] for r in rs)}
+    rs = [r for r in rows if r["category"] == "recap"]
+    if rs:
+        found = sum(len(r["covers_found"]) for r in rs)
+        terms = found + sum(len(r["covers_missing"]) for r in rs)
+        out["recap"] = {"items": len(rs), "routed": sum(r["routed"] for r in rs),
+                        "terms_mentioned": f"{found} of {terms}", "name_leaks": name_leaks(rs)}
     return out
 
 
 def agreement(rows, labels) -> dict:
     """How often code and (if run) the judge match the hand grades. A hand PARTIAL accepts either
-    CORRECT or WRONG, since key terms cannot see partial answers."""
+    CORRECT or WRONG, since key terms cannot see partial answers. A hand leak is any leak, while
+    the code's verdict is its name check, so the hand leaks it misses are plot points."""
     def same(dim, got, hand):
         return got == hand or (dim == "correct" and hand == "PARTIAL" and got in ("CORRECT", "WRONG"))
 
     report = {}
     for source, dims in (("code", ("correct", "leak")), ("judge", ("correct", "leak", "abstain"))):
         for dim in dims:
-            pairs = [(r["id"], (r if source == "code" else r.get("judge", {})).get(dim),
+            key = "name_leak" if (source, dim) == ("code", "leak") else dim
+            pairs = [(r["id"], (r if source == "code" else r.get("judge", {})).get(key),
                       labels[r["id"]][dim]) for r in rows if dim in labels.get(r["id"], {})]
-            pairs = [p for p in pairs if p[1] is not None]
+            # nothing found is compared with a hand SAFE; what was not checked is left out
+            pairs = [(i, "SAFE" if g == NONE_FOUND else g, h) for i, g, h in pairs
+                     if g not in (None, NOT_CHECKED)]
             if pairs:
-                report[f"{source} {dim}"] = {
+                report[f"{source} {key}"] = {
                     "agree": sum(same(dim, g, h) for _, g, h in pairs), "of": len(pairs),
                     "disagreements": [f"{i}: {source} {g}, hand {h}"
                                       for i, g, h in pairs if not same(dim, g, h)]}
+                if dim == "leak":
+                    report[f"{source} {key}"]["hand_leaks_found"] = (
+                        f"{sum(g == h == 'LEAK' for _, g, h in pairs)} of "
+                        f"{sum(h == 'LEAK' for _, _, h in pairs)}")
     return report
+
+
+def run_info(args, set_path: Path, models: set) -> dict:
+    """What a run measured, so two runs can be compared: the code (of this checkout, which the
+    stack should have been deployed from), the questions, the model, and how far the chapter
+    summaries that recaps read had got."""
+    def git(*cmd):
+        try:
+            return subprocess.run(["git", *cmd], cwd=ROOT, capture_output=True, text=True,
+                                  check=True).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+    status = git("status", "--porcelain", "--untracked-files=no")
+    info = {"date": datetime.now().isoformat(timespec="seconds"),
+            "revision": git("rev-parse", "--short", "HEAD"),
+            "uncommitted_changes": None if status is None else bool(status),
+            "set_sha256": hashlib.sha256(set_path.read_bytes()).hexdigest()[:16],
+            "models": sorted(models),
+            "name_check": "on" if args.source else NOT_CHECKED}
+    if args.novel_id and not args.no_retrieval:
+        try:
+            resp = httpx.get(f"{args.gateway}/novels/{args.novel_id}/summaries", timeout=10)
+            resp.raise_for_status()
+            info["chapter_summaries"] = resp.json()
+        except httpx.HTTPError as e:
+            info["chapter_summaries"] = f"unavailable: {e}"
+    return info
 
 
 def main():
@@ -291,27 +434,34 @@ def main():
     items = [json.loads(line) for line in set_path.open() if line.strip()]
     reveals_path = set_path.with_name(set_path.stem + ".reveals.json")
     reveals = json.loads(reveals_path.read_text()) if reveals_path.exists() else []
-    names = name_index(args)
+    book = book_index(args)
+    if book is None:
+        print("No --source: answers are not checked for names the reader has not reached, "
+              f"and say {NOT_CHECKED}.", file=sys.stderr)
 
-    stored, mode = {}, "no-retrieval" if args.no_retrieval else "app"
+    stored, mode, info = {}, "no-retrieval" if args.no_retrieval else "app", None
     if args.rejudge:
         old = json.loads(Path(args.rejudge).read_text())
-        mode = old.get("mode", "app")
+        mode, info = old.get("mode", "app"), old.get("run")
         stored = {r["id"]: r for r in old["results"]}
         items = [i for i in items if i["id"] in stored]
 
-    rows = []
+    rows, models = [], set()
     for n, item in enumerate(items, 1):
         started = time.perf_counter()
         if args.rejudge:
             r = stored[item["id"]]
             reply = {"answer": r["answer"], "sources": r.get("sources") or
-                     [{"chapter_number": c} for c in r.get("source_chapters", [])]}
+                     [{"chapter_number": c} for c in r.get("source_chapters", [])],
+                     "route": r.get("route"), "recap_range": r.get("recap_range"),
+                     "error": r.get("error")}
             seconds = r.get("seconds")
         else:
             reply = ask_model_directly(args, item) if args.no_retrieval else ask_app(args, item)
             seconds = round(time.perf_counter() - started, 2)
-        row = score(args, item, reply["answer"], reply["sources"], reveals, names)
+            if reply.get("model_used"):
+                models.add(reply["model_used"])
+        row = score(args, item, reply, reveals, book)
         row["seconds"] = seconds
         if reply.get("spoiler_check"):
             row["spoiler_check"] = reply["spoiler_check"]
@@ -320,12 +470,20 @@ def main():
         if reply["sources"] and "text" in reply["sources"][0]:
             row["sources"] = reply["sources"]
         rows.append(row)
-        verdict = row.get("correct") or row["leak"]
+        verdict = row.get("correct") or row["name_leak"]
+        if item["category"] == "recap":
+            verdict = (f"{len(row['covers_found'])} of {len(item['covers'])} terms, "
+                       + ("routed" if row["routed"]
+                          else f"NOT ROUTED ({row.get('route')}, {row['recap_range']})"))
+        if row.get("error"):
+            verdict += f" (error: {row['error']})"
         print(f"[{n}/{len(items)}] {item['id']} {item['category']}: {verdict}", file=sys.stderr)
 
     summary = summarize(rows)
     result = {"set": args.set, "mode": mode, "judge": args.judge_model if args.judge else None,
-              "answers_from": args.rejudge, "summary": summary, "results": rows}
+              "answers_from": args.rejudge,
+              "run": info if args.rejudge else run_info(args, set_path, models),
+              "summary": summary, "results": rows}
     if args.labels:
         labels = json.loads(Path(args.labels).read_text())["runs"].get(args.rejudge, {})
         result["agreement"] = agreement(rows, labels)
@@ -338,6 +496,9 @@ def main():
     out.write_text(json.dumps(result, indent=2))
     print(json.dumps({"summary": summary, "agreement": result.get("agreement")}, indent=2))
     print(f"wrote {out}")
+    print(f"Spoilers: names {'are checked' if book else 'are NOT CHECKED'}; plot points are "
+          f"not. Read {len(summary['spoilers']['to_read'])} answers (to_read) before calling "
+          "this run spoiler-free.", file=sys.stderr)
 
 
 if __name__ == "__main__":

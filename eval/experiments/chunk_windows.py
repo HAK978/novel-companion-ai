@@ -255,7 +255,8 @@ def main():
     args = ap.parse_args()
 
     report = {"variants": VARIANTS, "words": {"base": BASE_WORDS, "small": SMALL_WORDS}}
-    items = [json.loads(line) for line in open(args.set)]
+    # recap items test the recap endpoints, not search
+    items = [i for i in map(json.loads, open(args.set)) if i["category"] != "recap"]
     hound = Book("epub", args.hound)
     indexes = build(hound, "hound")
     found = {v: [passages(indexes, v, i["question"], i["current_chapter"]) for i in items]
@@ -304,7 +305,7 @@ def main():
             report["shadow_slave"][f"{a} vs {b}"] = f"only {a} {only_a}, only {b} {only_b}"
 
     if args.runs:
-        names = run_eval.name_index(argparse.Namespace(source=args.hound, source_type="epub"))
+        book = run_eval.book_index(argparse.Namespace(source=args.hound, source_type="epub"))
         reveals_path = Path(args.set).with_suffix(".reveals.json")
         reveals = json.loads(reveals_path.read_text()) if reveals_path.exists() else []
         score_args = argparse.Namespace(judge=False)
@@ -317,7 +318,8 @@ def main():
                 def answer(pair):
                     item, results = pair
                     text, seconds = generate(args, item, results)
-                    row = run_eval.score(score_args, item, text, results, reveals, names)
+                    row = run_eval.score(score_args, item, {"answer": text, "sources": results},
+                                         reveals, book)
                     return {**row, "seconds": seconds}
                 with ThreadPoolExecutor(args.parallel) as pool:
                     rows = list(pool.map(answer, zip(items, found[variant], strict=True)))

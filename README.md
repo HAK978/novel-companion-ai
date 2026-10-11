@@ -246,11 +246,15 @@ must be absent from the whole book. The set was then reviewed by hand
 (`sets/hound.review.json`), and `sets/hound.reveals.json` lists the book's reveals with the
 chapter each happens in.
 
-`run_eval.py` sends each question through `/query` at its reading position. Scoring is done in
-code where possible, because a local LLM judge disagreed with hand grades too often: fact
-answers by key terms, spoilers by names the book only mentions after the reader's chapter,
-with pattern matches flagged for review. `--rejudge` re-scores stored answers and `--labels`
-measures the scoring against hand grades (`labels/hound.json`). `--no-retrieval` asks the model
+`run_eval.py` asks each question at its reading position, through `/query` or, for recap
+items, `/summarize` and `/catch-me-up`. Scoring is done in code where possible, because a local
+LLM judge disagreed with hand grades too often: fact answers by key terms, recaps by whether
+they read the right chapters' summaries and which events of the range they mention, and
+spoilers by names the book only mentions after the reader's chapter. A name check cannot see a
+later plot point about a character the reader already knows, so it reports names found rather
+than safety, and each run lists the answers a person has to read (the spoiler questions and
+those matching a reveal pattern). `--rejudge` re-scores stored answers and `--labels` measures
+the scoring against graded answers (`labels/hound.json`). `--no-retrieval` asks the model
 directly instead, as a chatbot would be asked.
 
 ```bash

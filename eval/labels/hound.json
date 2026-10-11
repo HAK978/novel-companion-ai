@@ -1,5 +1,5 @@
 {
- "about": "Hand grades of stored answers, used to measure the LLM judge (run_eval.py --rejudge RESULTS --labels THIS). Graded 2026-10-05 against the book text. correct: CORRECT, PARTIAL, WRONG or DECLINED against accepted answers; leak: whether the answer discloses anything from eval/sets/hound.reveals.json revealed after the reader's chapter; abstain: whether an answer about a nonexistent person said so (ABSTAINED) or told anything about them (INVENTED). hound-037 and hound-046 were dropped from the set and are not graded. Corrected 2026-10-05: no-retrieval hound-017 pairs 'Rodger Baskerville' with 'his wife, Beryl' at chapter 6, which is the chapter-15 twist; first graded SAFE. The four 17:48-18:00 runs are graded only where checked: every answer the key terms passed, the new-prompt runs' failures, and every answer flagged for leaks.",
+ "about": "Hand grades of stored answers, used to measure the LLM judge (run_eval.py --rejudge RESULTS --labels THIS). Graded 2026-10-05 against the book text. correct: CORRECT, PARTIAL, WRONG or DECLINED against accepted answers; leak: whether the answer discloses anything from eval/sets/hound.reveals.json revealed after the reader's chapter; abstain: whether an answer about a nonexistent person said so (ABSTAINED) or told anything about them (INVENTED). hound-037 and hound-046 were dropped from the set and are not graded. Corrected 2026-10-05: no-retrieval hound-017 pairs 'Rodger Baskerville' with 'his wife, Beryl' at chapter 6, which is the chapter-15 twist; first graded SAFE. The four 17:48-18:00 runs are graded only where checked: every answer the key terms passed, the new-prompt runs' failures, and every answer flagged for leaks. The three 2026-10-10 runs are graded for leaks only, on the answers each lists under to_read; a keyword scan of their other answers found no further leak. Calling Stapleton 'Rodger' counts as a leak (his real name, chapter 15), as does 'the hound is a real animal' before chapter 14; 'cannot determine their true relationship' (hound-h05, 20:34) is borderline and graded SAFE.",
  "runs": {
   "eval/results/hound-20261005-154032.json": {
    "hound-003": {
@@ -613,6 +613,90 @@
    },
    "hound-h04": {
     "leak": "SAFE"
+   }
+  },
+  "eval/results/hound-20261010-202939.json": {
+   "hound-018": {
+    "leak": "LEAK"
+   },
+   "hound-028": {
+    "leak": "SAFE"
+   },
+   "hound-053": {
+    "leak": "SAFE"
+   },
+   "hound-h01": {
+    "leak": "LEAK"
+   },
+   "hound-h02": {
+    "leak": "SAFE"
+   },
+   "hound-h03": {
+    "leak": "LEAK"
+   },
+   "hound-h04": {
+    "leak": "SAFE"
+   },
+   "hound-h05": {
+    "leak": "LEAK"
+   }
+  },
+  "eval/results/hound-20261010-203435.json": {
+   "hound-012": {
+    "leak": "SAFE"
+   },
+   "hound-025": {
+    "leak": "LEAK"
+   },
+   "hound-027": {
+    "leak": "SAFE"
+   },
+   "hound-028": {
+    "leak": "SAFE"
+   },
+   "hound-053": {
+    "leak": "SAFE"
+   },
+   "hound-h01": {
+    "leak": "SAFE"
+   },
+   "hound-h02": {
+    "leak": "SAFE"
+   },
+   "hound-h03": {
+    "leak": "LEAK"
+   },
+   "hound-h04": {
+    "leak": "SAFE"
+   },
+   "hound-h05": {
+    "leak": "SAFE"
+   }
+  },
+  "eval/results/hound-20261010-204010.json": {
+   "hound-008": {
+    "leak": "LEAK"
+   },
+   "hound-028": {
+    "leak": "SAFE"
+   },
+   "hound-053": {
+    "leak": "SAFE"
+   },
+   "hound-h01": {
+    "leak": "SAFE"
+   },
+   "hound-h02": {
+    "leak": "SAFE"
+   },
+   "hound-h03": {
+    "leak": "LEAK"
+   },
+   "hound-h04": {
+    "leak": "SAFE"
+   },
+   "hound-h05": {
+    "leak": "LEAK"
    }
   }
  }

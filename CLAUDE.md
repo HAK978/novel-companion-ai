@@ -22,7 +22,8 @@ character questions are answered through search.
   last 10 (or N) chapters: search has no sense of time, and at chapter 1291 it offered
   chapters 527 and 398 as "the last few". Summaries pass through the strict check before they reach
   the model or `sources` (`_withheld_summaries`): they were returned unfiltered, and only the
-  answer was checked (found by Codex's audit, `handoff/2026-10-10-codex-audit.md`).
+  answer was checked (found by Codex's audit, `handoff/2026-10-10-codex-audit.md`). /query
+  says which it read in `source` ("chapter summaries" or "passages"), as /summarize does.
 - **Ingestion** (8001) — `services/ingestion/`. Celery tasks (`tasks.py`, core logic in
   `_process_chapter()`): clean HTML → chunk (~400 words, sentence-boundary, `chunking.py`)
   → split each chunk into windows of ≤170 words (`split_windows`, lossless) → embed the windows
@@ -120,7 +121,8 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
 - Range queries (`/summarize`, `/catch-me-up`) that fall back to search pass `min_chapter`;
   context chunks are labelled `[Chapter N: title]`. Their cache (`range_summaries`) is keyed
   by (novel_id, start, end) and outlives changes to how recaps are made: clear the table
-  after changing that, or old recaps keep being served.
+  after changing that, or old recaps keep being served. `use_cache: false` (what the
+  evaluation sends) neither reads nor writes it.
 - **The prompt is part of the spoiler defense.** A model may know a famous book: at chapter
   5 of the Hound it named the culprit from memory 7/20 times until the rules went into the
   system message (0/40). Keep `system_prompt()` in `llm_client.py`.
@@ -193,6 +195,16 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   mentioned after the reader's chapter; reveal patterns only flag answers for review (they
   overfit when written against graded answers). Check any scoring change with
   `run_eval.py --rejudge <results> --labels eval/labels/hound.json`.
+- **No name leak is not no spoiler.** The name check found 7 of the 21 labelled leaks, and
+  only 1 of the 13 in the app's own answers: the rest give away plot points about what the
+  reader already knows. In the three 2026-10-10 runs the model, from memory, called Stapleton
+  "Rodger" 3 times and told a chapter-5 reader the hound is a real animal in 3 of 3. So answers say LEAK or NONE FOUND (NOT CHECKED without `--source`, never
+  SAFE), and a run is spoiler-free only after someone reads its `to_read` answers (spoiler
+  questions and flagged ones). Recap items (`category: recap`, with an `endpoint`) are the
+  only ones that reach the summaries route, /summarize and /catch-me-up: the "recent"
+  category means the answer is in the reader's latest chapter, and none of those questions
+  is phrased as a recap. They are scored on route and range (`routed`) and on terms of the
+  range the recap mentions.
 - The answer prompt says "couldn't find it in the chapters the reader has read", never "the
   story has not revealed that yet": that was false whenever retrieval missed, and "yet" hints
   that a reveal is coming.

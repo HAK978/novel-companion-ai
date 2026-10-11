@@ -65,6 +65,9 @@ class QueryResponse(BaseModel):
     answer: str | None
     model_used: str = "none"
     sources: list[ChunkResult]
+    # "chapter summaries" when a question about recent events was answered from the stored
+    # summaries of the chapters before the reader's, "passages" when from search results
+    source: str = "passages"
     # "withheld" when the answer, or a chapter summary it drew on, named something the reader
     # has not reached and it was taken out; never what, since that would be the spoiler
     spoiler_check: str = "clean"
@@ -404,6 +407,7 @@ async def query(request: QueryRequest):
         answer=gen_data.get("answer"),
         model_used=gen_data.get("model_used", "none"),
         sources=results,
+        source="chapter summaries" if stored else "passages",
         spoiler_check="withheld" if summaries_withheld else check,
     )
 
@@ -415,11 +419,15 @@ class SummarizeRequest(BaseModel):
     start_chapter: int
     end_chapter: int
     current_chapter: int | None = None
+    # False writes a fresh recap and leaves the cache alone: evaluations must grade what the
+    # current code produces, not a recap cached by an earlier version
+    use_cache: bool = True
 
 
 class CatchMeUpRequest(BaseModel):
     novel_id: int
     user_id: str = "default"
+    use_cache: bool = True
 
 
 # A range recap reads every chapter's stored summary when all of them exist: ~120 words each,
@@ -473,7 +481,7 @@ async def summarize(request: SummarizeRequest):
                 {"nid": request.novel_id, "s": request.start_chapter, "e": end_ch},
             ).fetchone()
 
-    cached = await run_in_threadpool(cached_summary)
+    cached = await run_in_threadpool(cached_summary) if request.use_cache else None
 
     if cached:
         return {
@@ -541,7 +549,8 @@ async def summarize(request: SummarizeRequest):
             )
             conn.commit()
 
-    await run_in_threadpool(cache_summary)
+    if request.use_cache:
+        await run_in_threadpool(cache_summary)
 
     return {
         "summary": summary,
@@ -578,6 +587,7 @@ async def catch_me_up(request: CatchMeUpRequest):
         start_chapter=start,
         end_chapter=current_chapter,
         current_chapter=current_chapter,
+        use_cache=request.use_cache,
     ))
 
     # Get characters introduced in this range
@@ -595,6 +605,7 @@ async def catch_me_up(request: CatchMeUpRequest):
         "summary_range": {"start": start, "end": current_chapter},
         "summary": summary_resp.get("summary", ""),
         "cached": summary_resp.get("cached", False),
+        "source": summary_resp.get("source"),
         "new_characters": recent_chars,
     }
 

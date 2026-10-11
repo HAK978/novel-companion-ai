@@ -139,6 +139,7 @@ def test_query_returns_answer_and_sources(client, wire):
     assert body["answer"] == "He stepped through the gate."
     assert body["model_used"] == "test-model"
     assert body["sources"][0]["chapter_number"] == 1281
+    assert body["source"] == "passages"
 
 
 def test_query_is_recorded_in_search_history(client, wire):
@@ -547,7 +548,7 @@ def test_recent_events_are_answered_from_chapter_summaries(client, wire, gateway
 
     assert not any("/search" in c["url"] for c in calls)
     assert [s["chapter_number"] for s in body["sources"]] == [1289, 1290, 1291]
-
+    assert body["source"] == "chapter summaries"
 
 
 def without_underworld(payload):
@@ -587,3 +588,25 @@ def test_range_recaps_check_their_summaries_too(client, wire, gateway_main, monk
 
     generate = next(c for c in calls if "/generate" in c["url"])
     assert not any("Underworld" in chunk for chunk in generate["payload"]["context_chunks"])
+
+
+def test_an_uncached_recap_skips_the_cache_both_ways(client, wire):
+    # evaluations grade what the current code writes, not an older cached recap
+    _, engine = wire({"/search": SEARCH_HIT, "/generate": GENERATED}, row=("an old recap",))
+
+    body = client.post("/summarize", json={"novel_id": 3, "start_chapter": 10,
+                                           "end_chapter": 12, "use_cache": False}).json()
+
+    assert body["summary"] == GENERATED["answer"]
+    assert not any("range_summaries" in s["sql"] for s in engine.statements)
+
+
+def test_catch_me_up_can_skip_the_cache_and_says_what_it_read(client, wire):
+    _, engine = wire({"/search": SEARCH_HIT, "/generate": GENERATED, "/characters": []},
+                     row=(14,))
+
+    body = client.post("/catch-me-up", json={"novel_id": 4, "use_cache": False}).json()
+
+    assert body["summary"] == GENERATED["answer"]
+    assert body["source"] == "passages"
+    assert not any("range_summaries" in s["sql"] for s in engine.statements)
