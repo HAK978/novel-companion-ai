@@ -454,6 +454,15 @@ def _chapter_summaries(novel_id: int, start: int, end: int) -> list[tuple[int, s
     return [(r[0], r[1] or "", r[2]) for r in rows]
 
 
+def _recap_length(chapters: int) -> tuple[int, int]:
+    """Words to ask a recap for, and its token cap. With one answer-sized cap (800 tokens) and
+    no length asked, an 11-chapter recap ran out mid-sentence in 3 of 3 runs, so the reader's
+    latest chapters, written last, were squeezed or lost. The model writes about twice the
+    words asked (an 11-chapter recap asked for 385 ran to ~720), so the cap allows for that."""
+    words = min(max(35 * chapters, 150), 900)
+    return words, min(4 * words + 300, 3000)
+
+
 @app.post("/summarize")
 async def summarize(request: SummarizeRequest):
     reader_at = request.current_chapter or request.end_chapter
@@ -523,14 +532,16 @@ async def summarize(request: SummarizeRequest):
                        for r in results]
 
         # A failed generation is a failure, not a summary: it raises, and is never cached.
+        words, max_tokens = _recap_length(end_ch - request.start_chapter + 1)
         gen_data, _ = await _generate_checked(client, {
             "query": (
-                f"Summarize the key events, character developments, and plot points "
-                f"from chapters {request.start_chapter} to {end_ch}. "
-                f"Be comprehensive but concise."
+                f"Recap chapters {request.start_chapter} to {end_ch} in about {words} words: "
+                f"the key events, in chapter order, a sentence or two for each chapter, giving "
+                f"the last chapters as much room as the first."
             ),
             "context_chunks": context,
             "current_chapter": end_ch,
+            "max_tokens": max_tokens,
         }, request.novel_id, said="")
 
     summary = gen_data.get("answer") or ""

@@ -9,11 +9,24 @@ Construction does no I/O. The old handler probed the endpoint (and could load a 
 import time, which is why this service had no tests.
 """
 
+import re
+
 import httpx
 from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_TIMEOUT
 
 MAX_TOKENS = 800  # hard cap above the prompt's soft target so answers don't truncate
 TEMPERATURE = 0.3
+
+
+def _last_full_sentence(text: str) -> str:
+    """A completion stopped by the token limit, cut back to its last finished sentence: an
+    11-chapter recap ended "...fled to an old tin mine in the heart of" in 3 of 3 runs."""
+    ends = [m.end() for m in _SENTENCE_END.finditer(text)]
+    return text[:ends[-1]] if ends else text
+
+
+# a sentence end, but not the period of a title such as "Dr." or "Mrs."
+_SENTENCE_END = re.compile(r"(?<!\bDr)(?<!\bMr)(?<!\bMrs)(?<!\bMs)(?<!\bSt)[.!?][\"')*]*(?=\s|$)")
 
 
 class LLMError(RuntimeError):
@@ -170,19 +183,22 @@ class LLMClient:
             resp = httpx.post(f"{self.base_url}/chat/completions", json=payload,
                               headers=self._headers, timeout=self._timeout)
             resp.raise_for_status()
-            content = resp.json()["choices"][0]["message"]["content"]
+            choice = resp.json()["choices"][0]
+            content = choice["message"]["content"]
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
             raise LLMError(f"{self.base_url}: {exc}") from exc
         if not content or not content.strip():
             raise LLMError(f"{self.base_url}: empty completion")
+        if choice.get("finish_reason") == "length":
+            content = _last_full_sentence(content)
         return content.strip()
 
     def answer(self, query: str, context_chunks: list[str], conversation_context: str = "",
-               current_chapter: int | None = None) -> str:
+               current_chapter: int | None = None, max_tokens: int = MAX_TOKENS) -> str:
         """Answer a question from retrieved passages, for a reader at `current_chapter`."""
         return self.complete(
             build_prompt(query, context_chunks, conversation_context, current_chapter),
-            system=system_prompt(current_chapter),
+            system=system_prompt(current_chapter), max_tokens=max_tokens,
         )
 
     def status(self) -> dict:

@@ -273,3 +273,31 @@ def test_a_summary_fails_cleanly_when_the_model_is_unreachable(service, endpoint
     resp = service.post("/chapter-summary", json={"chapter_number": 1, "chapter_text": CHAPTER_TEXT})
 
     assert resp.status_code == 502
+
+
+def test_an_answer_cut_off_by_the_token_limit_ends_at_its_last_sentence(service, endpoint):
+    # an 11-chapter recap ended "...fled to an old tin mine in the heart of"
+    reply = completion("Selden died. They met Dr. Mortimer and Dr.")
+    reply["choices"][0]["finish_reason"] = "length"
+    endpoint[1]["post"] = reply
+
+    body = service.post("/generate", json={"query": "q", "context_chunks": ["c"]}).json()
+
+    assert body["answer"] == "Selden died."
+
+
+def test_a_finished_answer_is_left_whole(service, endpoint):
+    endpoint[1]["post"] = completion("He waited and then")
+
+    body = service.post("/generate", json={"query": "q", "context_chunks": ["c"]}).json()
+
+    assert body["answer"] == "He waited and then"
+
+
+def test_a_caller_can_ask_for_a_longer_answer(service, endpoint):
+    sent, replies = endpoint
+    replies["post"] = completion("A recap.")
+
+    service.post("/generate", json={"query": "q", "context_chunks": ["c"], "max_tokens": 1000})
+
+    assert sent[0]["json"]["max_tokens"] == 1000

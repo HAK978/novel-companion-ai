@@ -610,3 +610,17 @@ def test_catch_me_up_can_skip_the_cache_and_says_what_it_read(client, wire):
     assert body["summary"] == GENERATED["answer"]
     assert body["source"] == "passages"
     assert not any("range_summaries" in s["sql"] for s in engine.statements)
+
+
+def test_a_recap_asks_for_room_for_every_chapter(client, wire, gateway_main, monkeypatch):
+    # one answer-sized limit cut an 11-chapter recap off before its last chapters
+    calls, _ = wire({"/generate": GENERATED})
+    monkeypatch.setattr(gateway_main, "_chapter_summaries", lambda novel_id, s, e: [
+        (n, f"Chapter {n}", f"Summary {n}.") for n in range(s, e + 1)])
+
+    client.post("/summarize", json={"novel_id": 4, "start_chapter": 4, "end_chapter": 14})
+
+    generate = next(c for c in calls if "/generate" in c["url"])["payload"]
+    assert "about 385 words" in generate["query"]
+    assert generate["max_tokens"] == 1840
+    assert gateway_main._recap_length(60) == (900, 3000)

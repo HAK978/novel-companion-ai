@@ -2,8 +2,8 @@ import json
 
 from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from llm_client import SUMMARY_PROMPT_VERSION, LLMClient, LLMError, summarize_chapter
-from pydantic import BaseModel
+from llm_client import MAX_TOKENS, SUMMARY_PROMPT_VERSION, LLMClient, LLMError, summarize_chapter
+from pydantic import BaseModel, Field
 
 app = FastAPI(title="Generation Service")
 llm = LLMClient()
@@ -15,6 +15,8 @@ class GenerateRequest(BaseModel):
     conversation_context: str = ""
     # the reader's position, so the prompt can forbid anything later
     current_chapter: int | None = None
+    # longer than an answer for a recap of many chapters
+    max_tokens: int = Field(default=MAX_TOKENS, ge=50, le=3000)
 
 
 class GenerateResponse(BaseModel):
@@ -27,7 +29,7 @@ async def generate(request: GenerateRequest):
     try:
         answer = await run_in_threadpool(
             llm.answer, request.query, request.context_chunks,
-            request.conversation_context, request.current_chapter,
+            request.conversation_context, request.current_chapter, request.max_tokens,
         )
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

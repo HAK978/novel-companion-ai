@@ -123,6 +123,10 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   by (novel_id, start, end) and outlives changes to how recaps are made: clear the table
   after changing that, or old recaps keep being served. `use_cache: false` (what the
   evaluation sends) neither reads nor writes it.
+- **Recaps get their own length.** `_recap_length` asks for ~35 words a chapter and allows
+  about four times that in tokens: Nemo writes roughly double what it is asked, and under the
+  answer cap (800) an 11-chapter recap was cut off before its last chapters in 3 of 3 runs.
+  An answer stopped by the token limit is trimmed to its last full sentence (`complete`).
 - **The prompt is part of the spoiler defense.** A model may know a famous book: at chapter
   5 of the Hound it named the culprit from memory 7/20 times until the rules went into the
   system message (0/40). Keep `system_prompt()` in `llm_client.py`.
