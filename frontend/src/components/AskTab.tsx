@@ -76,7 +76,7 @@ export default function AskTab({ apiUrl, novelId, currentChapter }: {
         {visible.length === 0 && (
           <div className="text-center text-[#737373] mt-16">
             <p className="text-lg">Ask anything about the novel</p>
-            <p className="text-sm mt-2">Your answers will be spoiler-free up to chapter {currentChapter}</p>
+            <p className="text-sm mt-2">Only chapters 1 to {currentChapter} are searched for answers</p>
           </div>
         )}
         {visible.map((msg, i) => (

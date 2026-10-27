@@ -26,9 +26,10 @@ it can be, because an LLM judge proved unreliable:
   unanswerable   whether the answer says it cannot find the person (strict: an answer that
                  neither says so nor invents anything still fails)
 
-So a run is spoiler-free only once a person has read the answers it lists under "to_read"
-(the spoiler questions and the flagged answers); grades go in eval/labels/, and --labels
-counts them.
+So the name check never makes a run spoiler-free. "to_read" lists the answers to read at
+least: the spoiler questions, the flagged answers, and a random sample of the rest, since a
+plot leak can sit in an answer nothing flagged (three "Rodger Stapleton" leaks were in fact
+questions). Grades go in eval/labels/, and --labels counts them.
 
 Measured against hand grades (eval/labels/hound.json): key terms agreed on 59 of the 60
 answers they were written against, but on fresh answers 5 of 64 passes were wrong or only
@@ -52,6 +53,7 @@ Results go to eval/results/<set>[-no-retrieval][-rejudge]-<timestamp>.json.
 import argparse
 import hashlib
 import json
+import random
 import re
 import subprocess
 import sys
@@ -297,6 +299,20 @@ def score(args, item, reply, reveals, book) -> dict:
     return row
 
 
+# Unflagged answers read as well, drawn from the run's own answers, so re-scoring a run
+# draws the same ones while each new run draws others
+UNFLAGGED_TO_READ = 5
+
+
+def to_read(rows) -> list[str]:
+    """The answers a person must read before trusting a run on spoilers: the spoiler questions,
+    the answers matching a reveal pattern, and a random sample of the rest."""
+    listed = [r["id"] for r in rows if r["category"] == "spoiler" or r.get("leak_review")]
+    rest = sorted(r["id"] for r in rows if r["id"] not in listed)
+    seed = hashlib.sha256("\n".join(r["answer"] for r in rows).encode()).hexdigest()
+    return listed + sorted(random.Random(seed).sample(rest, min(UNFLAGGED_TO_READ, len(rest))))
+
+
 def summarize(rows) -> dict:
     def count(rs, key, value):
         return sum(r.get(key) == value for r in rs)
@@ -316,10 +332,10 @@ def summarize(rows) -> dict:
                                   if checked else NOT_CHECKED),
         "answers_naming_unread": name_leaks(rows),
         # what no name check sees: a later plot point about someone the reader knows
-        "plot_leaks": "not checked in code: read the answers in to_read",
+        "plot_leaks": "not checked in code: read the answers in to_read (with a sample of "
+                      "unflagged ones), and more of the rest before any claim of none",
         "flagged_for_review": [r["id"] for r in rows if r.get("leak_review")],
-        "to_read": [r["id"] for r in rows
-                    if r["category"] == "spoiler" or r.get("leak_review")],
+        "to_read": to_read(rows),
     }
     by_app = [r["spoiler_check"] for r in rows if r.get("spoiler_check")]
     if by_app:
@@ -497,8 +513,8 @@ def main():
     print(json.dumps({"summary": summary, "agreement": result.get("agreement")}, indent=2))
     print(f"wrote {out}")
     print(f"Spoilers: names {'are checked' if book else 'are NOT CHECKED'}; plot points are "
-          f"not. Read {len(summary['spoilers']['to_read'])} answers (to_read) before calling "
-          "this run spoiler-free.", file=sys.stderr)
+          f"not. Read at least the {len(summary['spoilers']['to_read'])} answers in to_read "
+          "(spoiler questions, flagged answers and a sample of the rest).", file=sys.stderr)
 
 
 if __name__ == "__main__":

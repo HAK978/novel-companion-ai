@@ -147,3 +147,18 @@ def test_each_recap_goes_to_its_endpoint_written_fresh(run_eval, monkeypatch):
     assert summarized["recap_range"] == [4, 6]
     assert caught_up["recap_range"] == [4, 14]
     assert caught_up["route"] == "chapter summaries"
+
+
+def test_a_sample_of_unflagged_answers_is_read_too(run_eval):
+    # a plot leak can sit in an answer nothing flagged: three were in fact questions
+    def run(word):
+        return [run_eval.score(NO_JUDGE, {"id": f"f{i:02}", "category": "fact", "question": "q",
+                                          "current_chapter": 7}, reply(f"{word} {i}."), [], BOOK)
+                for i in range(20)]
+
+    first = run_eval.summarize(run("Answer"))["spoilers"]["to_read"]
+
+    assert len(first) == run_eval.UNFLAGGED_TO_READ
+    assert run_eval.summarize(run("Answer"))["spoilers"]["to_read"] == first  # re-scored
+    assert run_eval.summarize(run("Reply"))["spoilers"]["to_read"] != first  # another run
+

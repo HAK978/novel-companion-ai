@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/HAK978/novel-companion-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/HAK978/novel-companion-ai/actions/workflows/ci.yml)
 
-**Ask anything about a 3,000-chapter web novel, without spoilers.**
+**Ask anything about a 3,000-chapter web novel, with answers scoped to the chapters you've read.**
 
 A self-hosted AI reading companion. It answers questions, recaps what you've read and looks
-up characters using only the chapters you've reached, even when the model already knows
-how the book ends. Built as FastAPI services around a RAG pipeline and a local LLM (Mistral
+up characters from the chapters you've reached, with guardrails for a model that may already
+know how the book ends. Built as FastAPI services around a RAG pipeline and a local LLM (Mistral
 Nemo 12B on vLLM), with an evaluation harness behind every change and an MCP server that
 lets Claude use it as a set of tools.
 
@@ -17,9 +17,9 @@ lets Claude use it as a set of tools.
 | | |
 |---|---|
 | **Scale** | Shadow Slave: 3,025 chapters, 3.7M words, indexed in 11 minutes. Early chapters are searchable within seconds while the rest loads |
-| **Retrieval** | Small-to-big retrieval raised retrieval recall from 42% to 53% on 262 questions (p < 0.001) |
-| **Answers** | Answer accuracy on the evaluation set rose from 56% to 68%, with fewer wrong answers |
-| **Spoiler safety** | Retrieval never sees unread chapters. System-prompt rules cut leaks on spoiler-inviting questions from 7 of 20 answers to 0 of 40, and a name filter removes names the reader hasn't reached |
+| **Retrieval** | Small-to-big retrieval raised retrieval recall (the passage holding the answer among those returned) from 42% to 53% on 262 generated Shadow Slave questions (p < 0.001) |
+| **Answers** | Answers to 30 Hound questions went from 56% to 68% right (graded against the book, mean of 3 runs, partly right counted as half), with fewer wrong answers |
+| **Spoiler safety** | Retrieval never searches unread chapters, and a name filter removes names the reader hasn't reached. A model that knows the book can still hint at later plot points, so evaluation runs are checked by reading answers, not by counting names |
 | **Evaluation** | A golden question set scored in code. An LLM judge matched reference labels on only 30 of 47 spoiler calls, so it was replaced |
 | **Fully local** | Embeddings, LLM, vector store and databases run on one machine. No paid APIs |
 
@@ -42,11 +42,13 @@ questions before this one shipped (`eval/experiments/chunk_windows.py`).
 
 **Guardrails against the model's memory.** A model may already know a famous book. Asked at
 chapter 5 of *The Hound of the Baskervilles* who "turns out to be the villain", it named the
-culprit from memory; across four such questions it leaked in 7 of 20 answers. The reader's
-position and a no-outside-knowledge rule now go to the model as a system message: 0 of 40.
-It can still slip in a remembered name, so ingestion records the chapter where every word of
-the book first appears, and names the reader hasn't reached are removed before an answer is
-shown. A real answer at chapter 14:
+culprit from memory; across four such questions it leaked in 7 of 20 answers. With the
+reader's position and a no-outside-knowledge rule sent as a system message, those four
+questions leaked in 0 of 40. That does not make it spoiler-proof: across a wider set of
+questions it can still hint at a later plot point without naming anyone new, which is why
+evaluation runs are checked by reading answers. It can also slip in a remembered name, so
+ingestion records the chapter where every word of the book first appears, and names the
+reader hasn't reached are removed before an answer is shown. A real answer at chapter 14:
 
 > Model: "…the woman tied to the post in Stapleton's house is his wife, **Beryl Garcia**."
 > Shown: "…the woman tied to the post in Stapleton's house is his wife, **Beryl**."
@@ -242,20 +244,28 @@ docker compose up -d    # back to the real model
 `eval/` holds a question set for *The Hound of the Baskervilles* (public domain) and the
 scripts that made and score it. `generate_set.py` drafts questions for any book with an LLM
 and keeps only those it can check: answers must quote the chapter verbatim, and invented names
-must be absent from the whole book. The set was then reviewed by hand
+must be absent from the whole book. The set was then reviewed item by item against the book
 (`sets/hound.review.json`), and `sets/hound.reveals.json` lists the book's reveals with the
 chapter each happens in.
 
 `run_eval.py` asks each question at its reading position, through `/query` or, for recap
 items, `/summarize` and `/catch-me-up`. Scoring is done in code where possible, because a local
-LLM judge disagreed with hand grades too often: fact answers by key terms, recaps by whether
+LLM judge disagreed with the reference grades too often: fact answers by key terms, recaps by whether
 they read the right chapters' summaries and which events of the range they mention, and
 spoilers by names the book only mentions after the reader's chapter. A name check cannot see a
 later plot point about a character the reader already knows, so it reports names found rather
-than safety, and each run lists the answers a person has to read (the spoiler questions and
-those matching a reveal pattern). `--rejudge` re-scores stored answers and `--labels` measures
-the scoring against graded answers (`labels/hound.json`). `--no-retrieval` asks the model
-directly instead, as a chatbot would be asked.
+than safety, and each run lists the answers a person has to read (the spoiler questions,
+those matching a reveal pattern, and a random sample of the rest). `--rejudge` re-scores
+stored answers and `--labels` measures the scoring against graded answers
+(`labels/hound.json`). `--no-retrieval` asks the model directly instead, as a chatbot would be
+asked.
+
+The numbers in Highlights come from these sets, measured the same way before and after each
+change: retrieval on 262 questions generated from Shadow Slave's first 600 chapters (found
+when a returned passage covers the sentence the answer came from;
+`eval/experiments/chunk_windows.py`), and answers on the Hound's 30 factual questions,
+graded against the book. Both sets were used while building the app, so they show what a change did
+rather than how it would do on questions it has never seen.
 
 ```bash
 python eval/run_eval.py --set eval/sets/hound.jsonl --novel-id 4 \

@@ -149,7 +149,8 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   An answer stopped by the token limit is trimmed to its last full sentence (`complete`).
 - **The prompt is part of the spoiler defense.** A model may know a famous book: at chapter
   5 of the Hound it named the culprit from memory 7/20 times until the rules went into the
-  system message (0/40). Keep `system_prompt()` in `llm_client.py`.
+  system message (0/40 on those four questions; on a wider set it still hints at later plot
+  points, as the 2026-10-10 runs found). Keep `system_prompt()` in `llm_client.py`.
 - **EPUB chapters come from the spine plus the table of contents**, front and back matter
   dropped by title, Project Gutenberg boilerplate clipped at its START/END markers. Entries
   under 100 words (title pages) are dropped unless titled as a chapter or prologue/epilogue:
@@ -227,14 +228,16 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   `run_eval.py --rejudge <results> --labels eval/labels/hound.json`.
 - **No name leak is not no spoiler.** The name check found 7 of the 21 labelled leaks, and
   only 1 of the 13 in the app's own answers: the rest give away plot points about what the
-  reader already knows. In the three 2026-10-10 runs the model, from memory, called Stapleton
-  "Rodger" 3 times and told a chapter-5 reader the hound is a real animal in 3 of 3. So answers say LEAK or NONE FOUND (NOT CHECKED without `--source`, never
-  SAFE), and a run is spoiler-free only after someone reads its `to_read` answers (spoiler
-  questions and flagged ones). Recap items (`category: recap`, with an `endpoint`) are the
-  only ones that reach the summaries route, /summarize and /catch-me-up: the "recent"
-  category means the answer is in the reader's latest chapter, and none of those questions
-  is phrased as a recap. They are scored on route and range (`routed`) and on terms of the
-  range the recap mentions.
+  reader already knows. In the three 2026-10-10 runs the model, from memory, called
+  Stapleton "Rodger" 3 times and told a chapter-5 reader the hound is a real animal in 3 of
+  3. So answers say LEAK or NONE FOUND (NOT CHECKED without `--source`, never SAFE), and no
+  run is spoiler-free on its name count: `to_read` lists the answers to read at least
+  (spoiler questions, flagged ones and a random sample of the rest, since a leak can sit in
+  an answer nothing flagged, as the three "Rodger" ones did in fact questions). Recap items
+  (`category: recap`, with an `endpoint`) are the only ones that reach the summaries route,
+  /summarize and /catch-me-up: the "recent" category means the answer is in the reader's
+  latest chapter, and none of those questions is phrased as a recap. They are scored on
+  route and range (`routed`) and on terms of the range the recap mentions.
 - The answer prompt says "couldn't find it in the chapters the reader has read", never "the
   story has not revealed that yet": that was false whenever retrieval missed, and "yet" hints
   that a reveal is coming.
