@@ -121,7 +121,7 @@ def test_query_labels_context_with_chapter_numbers(client, wire):
     # one narrative, which is how cross-arc answers happen.
     calls, _ = wire({"/search": SEARCH_HIT, "/generate": GENERATED})
 
-    client.post("/query", json={"query": "what happened?", "novel_id": 3, "current_chapter": 1291})
+    client.post("/query", json={"query": "Where did Sunny go?", "novel_id": 3, "current_chapter": 1291})
 
     generate = next(c for c in calls if "/generate" in c["url"])
     chunk = generate["payload"]["context_chunks"][0]
@@ -133,7 +133,7 @@ def test_query_returns_answer_and_sources(client, wire):
     wire({"/search": SEARCH_HIT, "/generate": GENERATED})
 
     body = client.post(
-        "/query", json={"query": "what happened?", "novel_id": 3, "current_chapter": 1291}
+        "/query", json={"query": "Where did Sunny go?", "novel_id": 3, "current_chapter": 1291}
     ).json()
 
     assert body["answer"] == "He stepped through the gate."
@@ -145,7 +145,7 @@ def test_query_returns_answer_and_sources(client, wire):
 def test_query_is_recorded_in_search_history(client, wire):
     _, engine = wire({"/search": SEARCH_HIT, "/generate": GENERATED})
 
-    client.post("/query", json={"query": "what happened?", "novel_id": 3, "current_chapter": 1291})
+    client.post("/query", json={"query": "Where did Sunny go?", "novel_id": 3, "current_chapter": 1291})
 
     assert any("search_history" in s["sql"] for s in engine.statements)
 
@@ -298,7 +298,7 @@ def test_query_surfaces_generation_failure(client, wire):
     wire({"/search": SEARCH_HIT, "/generate": FakeResponse({"detail": "boom"}, 502)})
 
     response = client.post(
-        "/query", json={"query": "what happened?", "novel_id": 3, "current_chapter": 500}
+        "/query", json={"query": "Where did Sunny go?", "novel_id": 3, "current_chapter": 500}
     )
 
     assert response.status_code == 502
@@ -310,7 +310,8 @@ def test_query_surfaces_generation_failure(client, wire):
 def test_new_novel_clears_a_leftover_collection_before_it_exists(client, wire):
     # A database reset that kept the vector store would otherwise hand the new novel the
     # old novel's chunks under the same collection name
-    calls, engine = wire({"/delete-collection": {"deleted": True}}, row=(7, "New Novel", "now"))
+    calls, engine = wire({"/delete-collection": {"status": "deleted"}},
+                         row=(7, "New Novel", "now"))
 
     body = client.post("/novels", json={"title": "New Novel"}).json()
 
@@ -504,7 +505,8 @@ def test_summaries_are_checked_before_they_are_cached(client, wire):
                                            "end_chapter": 14}).json()
 
     cached = next(s for s in engine.statements if "INSERT INTO range_summaries" in s["sql"])
-    assert body["summary"] == cached["params"]["sum"] == "She is his wife, Beryl."
+    assert body["summary"] == cached["params"]["sum"]
+    assert body["summary"].startswith("She is his wife, Beryl.")
 
 
 def test_a_recap_reads_every_chapters_summary_when_all_exist(client, wire, gateway_main,
@@ -524,16 +526,103 @@ def test_a_recap_reads_every_chapters_summary_when_all_exist(client, wire, gatew
     assert body["source"] == "chapter summaries"
 
 
-@pytest.mark.parametrize("question,expected", [
-    ("What happened in the last few chapters?", (1282, 1291)),
-    ("Catch me up", (1282, 1291)),
-    ("What happened recently with Nephis?", (1282, 1291)),
-    ("Summarize the last 5 chapters", (1287, 1291)),
-    ("Who is Nephis?", None),
-    ("What happened at the Dark City?", None),
+@pytest.mark.parametrize("question,scope,recap", [
+    # the audit's examples, at chapter 1291: one keyword used to pick both scope and evidence
+    ("What has happened so far?", (1, 1291), True),
+    ("How many steps of Shadow Dance has Sunny mastered so far, and how did he reach each one?",
+     (1, 1291), False),
+    ("What happened in the last 100 chapters?", (1192, 1291), True),
+    ("What happened in the last couple of chapters?", (1290, 1291), True),
+    ("Why did Sunny change his mind recently?", (1282, 1291), False),
+    ("What happened in the last few chapters?", (1289, 1291), True),
+    ("What happened in the last chapter?", (1291, 1291), True),
+    ("Summarize the last 5 chapters", (1287, 1291), True),
+    ("Catch me up", None, True),
+    ("What happened recently with Nephis?", (1282, 1291), False),
+    ("What happened in chapter 12?", (12, 12), True),
+    ("Who did Sunny fight in chapters 3 to 5?", (3, 5), False),
+    ("Who is Nephis?", None, False),
+    ("What happened at the Dark City?", None, False),
 ])
-def test_questions_about_recent_events_are_recognized(gateway_main, question, expected):
-    assert gateway_main._recent_range(question, 1291) == expected
+def test_questions_say_which_chapters_they_are_about_and_whether_they_want_a_recap(
+        gateway_main, question, scope, recap):
+    assert gateway_main._question_scope(question, 1291) == scope
+    assert gateway_main._is_recap(question) == recap
+
+
+def summaries_of_every_chapter(novel_id, start, end):
+    return [(n, f"Chapter {n}", f"Summary {n}.") for n in range(start, end + 1)]
+
+
+def test_a_specific_question_searches_the_book_within_its_chapters(client, wire, gateway_main,
+                                                                  monkeypatch):
+    # answered from summaries, which get who-did-what wrong about 1 time in 5
+    calls, _ = wire({"/search": SEARCH_HIT, "/generate": GENERATED})
+    monkeypatch.setattr(gateway_main, "_chapter_summaries",
+                        lambda *args: pytest.fail("a specific question read summaries"))
+
+    body = client.post("/query", json={"query": "Why did Sunny change his mind recently?",
+                                       "novel_id": 3, "current_chapter": 1291}).json()
+
+    search = next(c for c in calls if "/search" in c["url"])["payload"]
+    assert (search["min_chapter"], search["current_chapter"]) == (1282, 1291)
+    assert (body["scope"], body["source"]) == ([1282, 1291], "passages")
+
+
+def test_a_recap_wider_than_one_call_says_what_it_covers(client, wire, gateway_main, monkeypatch):
+    # "the last 100 chapters" quietly became the last 60
+    wire({"/generate": GENERATED})
+    monkeypatch.setattr(gateway_main, "_chapter_summaries", summaries_of_every_chapter)
+
+    body = client.post("/query", json={"query": "What happened in the last 100 chapters?",
+                                       "novel_id": 3, "current_chapter": 1291}).json()
+
+    assert body["scope"] == [1192, 1291]
+    assert [s["chapter_number"] for s in body["sources"]] == list(range(1232, 1292))
+    assert "covers chapters 1232\u20131291" in body["answer"]
+
+
+def test_a_recap_without_summaries_still_searches_only_its_chapters(client, wire):
+    # without summaries the search used to cover every chapter read, and call it recent
+    calls, _ = wire({"/search": SEARCH_HIT, "/generate": GENERATED})
+
+    body = client.post("/query", json={"query": "What happened in the last 3 chapters?",
+                                       "novel_id": 3, "current_chapter": 100}).json()
+
+    search = next(c for c in calls if "/search" in c["url"])["payload"]
+    assert (search["min_chapter"], search["current_chapter"]) == (98, 100)
+    assert "not ready yet" in body["answer"]
+
+
+def test_a_chapter_not_reached_is_refused_before_any_search(client, wire):
+    calls, _ = wire({})
+
+    body = client.post("/query", json={"query": "What happens in chapter 1300?",
+                                       "novel_id": 3, "current_chapter": 1291}).json()
+
+    assert body["answer"] == "You haven't reached chapter 1300 yet."
+    assert calls == []
+
+
+def test_a_failed_search_is_an_error_not_an_empty_answer(client, wire):
+    wire({"/search": FakeResponse({"detail": "down"}, status_code=500)})
+
+    resp = client.post("/query", json={"query": "Who is Nephis?", "novel_id": 3,
+                                       "current_chapter": 1291})
+
+    assert resp.status_code == 502
+
+
+def test_a_range_recap_wider_than_one_call_says_what_it_covers(client, wire, gateway_main,
+                                                              monkeypatch):
+    wire({"/generate": GENERATED})
+    monkeypatch.setattr(gateway_main, "_chapter_summaries", summaries_of_every_chapter)
+
+    body = client.post("/summarize", json={"novel_id": 3, "start_chapter": 1,
+                                           "end_chapter": 300}).json()
+
+    assert body["covered"] == [241, 300]
+    assert "covers chapters 241\u2013300" in body["summary"]
 
 
 def test_recent_events_are_answered_from_chapter_summaries(client, wire, gateway_main,
@@ -597,7 +686,7 @@ def test_an_uncached_recap_skips_the_cache_both_ways(client, wire):
     body = client.post("/summarize", json={"novel_id": 3, "start_chapter": 10,
                                            "end_chapter": 12, "use_cache": False}).json()
 
-    assert body["summary"] == GENERATED["answer"]
+    assert body["summary"].startswith(GENERATED["answer"])
     assert not any("range_summaries" in s["sql"] for s in engine.statements)
 
 
@@ -607,7 +696,8 @@ def test_catch_me_up_can_skip_the_cache_and_says_what_it_read(client, wire):
 
     body = client.post("/catch-me-up", json={"novel_id": 4, "use_cache": False}).json()
 
-    assert body["summary"] == GENERATED["answer"]
+    assert body["summary"].startswith(GENERATED["answer"])
+    assert "not ready yet" in body["summary"]  # from searched passages, and it says so
     assert body["source"] == "passages"
     assert not any("range_summaries" in s["sql"] for s in engine.statements)
 
@@ -624,3 +714,38 @@ def test_a_recap_asks_for_room_for_every_chapter(client, wire, gateway_main, mon
     assert "about 385 words" in generate["query"]
     assert generate["max_tokens"] == 1840
     assert gateway_main._recap_length(60) == (900, 3000)
+
+
+@pytest.mark.parametrize("reply", [
+    FakeResponse({"detail": "disk full"}, status_code=500),  # the deletion itself failed
+    {"deleted": False},                                      # the old reply for any failure
+])
+def test_new_novel_is_not_created_when_a_leftover_collection_survives(client, wire, reply):
+    # a reused id would otherwise inherit another novel's text
+    _, engine = wire({"/delete-collection": reply}, row=(7, "New Novel", "now"))
+
+    resp = client.post("/novels", json={"title": "New Novel"})
+
+    assert resp.status_code == 503
+    assert not any("INSERT INTO novels" in s["sql"] for s in engine.statements)
+
+
+
+def test_a_failed_ingest_keeps_its_status(client, wire):
+    # errors from the services used to arrive as 200s
+    wire({"/ingest/from-source": FakeResponse({"detail": "no such path"}, status_code=422)})
+
+    resp = client.post("/ingest/from-source", json={"novel_id": 4, "source_type": "epub",
+                                                   "source_path": "/novels/missing.epub"})
+
+    assert (resp.status_code, resp.json()) == (422, {"detail": "no such path"})
+
+
+def test_catch_me_up_passes_on_a_failed_recap(client, wire):
+    # it used to answer with an empty recap
+    wire({"/search": {"results": []}}, row=(14,))
+
+    body = client.post("/catch-me-up", json={"novel_id": 4, "use_cache": False}).json()
+
+    assert body["error"] == "No content found for this chapter range"
+    assert "summary" not in body

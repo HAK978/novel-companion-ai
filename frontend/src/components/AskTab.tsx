@@ -13,6 +13,8 @@ type Message = {
   role: 'user' | 'assistant'
   content: string
   sources?: Source[]
+  // the reading position it was asked at: after moving back, later answers are hidden
+  chapter: number
 }
 
 export default function AskTab({ apiUrl, novelId, currentChapter }: {
@@ -27,7 +29,8 @@ export default function AskTab({ apiUrl, novelId, currentChapter }: {
   const handleAsk = async () => {
     if (!query.trim() || loading) return
 
-    const userMsg: Message = { role: 'user', content: query }
+    const askedAt = currentChapter
+    const userMsg: Message = { role: 'user', content: query, chapter: askedAt }
     setMessages(prev => [...prev, userMsg])
     setQuery('')
     setLoading(true)
@@ -38,36 +41,45 @@ export default function AskTab({ apiUrl, novelId, currentChapter }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: query,
-          current_chapter: currentChapter,
+          current_chapter: askedAt,
           novel_id: novelId,
         }),
       })
-      const data = await resp.json()
-
-      const assistantMsg: Message = {
-        role: 'assistant',
-        content: data.answer || 'No answer generated.',
-        sources: data.sources || [],
+      if (!resp.ok) {
+        // an error is not an answer: it used to show as "No answer generated."
+        setMessages(prev => [...prev, { role: 'assistant', chapter: askedAt,
+          content: `Something went wrong answering that (HTTP ${resp.status}).` }])
+      } else {
+        const data = await resp.json()
+        const assistantMsg: Message = {
+          role: 'assistant',
+          content: data.answer || 'No answer generated.',
+          sources: data.sources || [],
+          chapter: askedAt,
+        }
+        setMessages(prev => [...prev, assistantMsg])
       }
-      setMessages(prev => [...prev, assistantMsg])
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Error connecting to the server.' }])
+      setMessages(prev => [...prev, { role: 'assistant', chapter: askedAt,
+        content: 'Error connecting to the server.' }])
     }
 
     setLoading(false)
   }
 
+  const visible = messages.filter(m => m.chapter <= currentChapter)
+
   return (
     <div className="flex flex-col h-full">
       {/* Messages */}
       <div className="flex-1 space-y-4 mb-4">
-        {messages.length === 0 && (
+        {visible.length === 0 && (
           <div className="text-center text-[#737373] mt-16">
             <p className="text-lg">Ask anything about the novel</p>
             <p className="text-sm mt-2">Your answers will be spoiler-free up to chapter {currentChapter}</p>
           </div>
         )}
-        {messages.map((msg, i) => (
+        {visible.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${
               msg.role === 'user'

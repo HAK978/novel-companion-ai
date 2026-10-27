@@ -16,17 +16,31 @@ character questions are answered through search.
   ("withheld" or "clean"), never the names. Asking the model to rewrite without them was
   tried first and dropped: it kept the name in 5 of 12 tries and complying rewrites got
   worse. /summarize and /catch-me-up read the stored summary of every chapter in the range,
-  in order, when all exist and the range is at most 60 chapters (`_chapter_summaries`,
-  `RECAP_FROM_SUMMARIES_MAX`); otherwise they search. /query sends recent-events questions
-  ("recently", "catch me up", "the last N chapters": `_recent_range`) to the summaries of the
-  last 10 (or N) chapters: search has no sense of time, and at chapter 1291 it offered
-  chapters 527 and 398 as "the last few". Summaries pass through the strict check before they reach
-  the model or `sources` (`_withheld_summaries`): they were returned unfiltered, and only the
-  answer was checked (found by Codex's audit, `handoff/2026-10-10-codex-audit.md`). /query
-  says which it read in `source` ("chapter summaries" or "passages"), as /summarize does.
+  in order, when all exist: the last 60 of a wider range, and the recap says so
+  (`_chapter_summaries`, `RECAP_FROM_SUMMARIES_MAX`); otherwise they search within the range,
+  and say that too. /query reads two things from a question,
+  separately: the chapters it is about (`_question_scope`: "chapter 12", "chapters 3 to 5",
+  "the last couple of chapters" = 2, "few" = 3, "recently" = the last 10, "so far" = all read)
+  and whether it asks for a recap (`_is_recap`: "catch me up", "what happened in the last 3
+  chapters?", not "what happened to Sunny's sword?"). Recaps read the summaries of their
+  chapters (search has no sense of time: at chapter 1291 it offered chapters 527 and 398 as
+  "the last few"); specific questions search the book's own passages within the scope
+  (`min_chapter` and a ceiling), since summaries get who-did-what wrong. A recap wider than 60
+  chapters reads the last 60 and the answer says so (`_recap_note`), as does a recap whose
+  summaries are missing (it then searches within its scope); a chapter past the reader is
+  refused before any search. One keyword used to decide scope and evidence together: "so far"
+  meant the last 10 chapters and "the last 100" silently became 60 (Codex's second audit,
+  `handoff/2026-10-26-codex-design-audit.md`). Summaries pass through the strict check before
+  they reach the model or `sources` (`_withheld_summaries`). /query reports `source` ("chapter
+  summaries" or "passages") and `scope`; /summarize reports `source` and `covered`.
+  Downstream failures are errors, never empty results (`_check`; proxies relay the status with
+  `_relay`), and a novel is created only when retrieval reports its collection "deleted" or
+  "absent": a failed deletion used to be accepted, so a reused id could inherit another
+  novel's text.
 - **Ingestion** (8001) — `services/ingestion/`. Celery tasks (`tasks.py`, core logic in
   `_process_chapter()`): clean HTML → chunk (~400 words, sentence-boundary, `chunking.py`)
-  → split each chunk into windows of ≤170 words (`split_windows`, lossless) → embed the windows
+  → split each chunk into windows of ≤170 words and ≤256 tokens (`split_windows` with
+  `_window_fits`, the model's own tokenizer; lossless) → embed the windows
   (all-MiniLM-L6-v2, Chroma's ONNX build; bulk ingests embed 32 chapters per call in
   `_ingest_chapters()`) → store the windows in ChromaDB (`chunk_index`, `window_index`) →
   the chapter's words in `book_words` (where each word first appears, and first appears in
@@ -85,7 +99,8 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   (from its indexed chapters; ~80 s for Shadow Slave), then a recheck.
 - **Bulk ingest:** POST /ingest/from-source with `extract_entities: false` (default) and a
   `source_path` under `/novels` (host `NOVEL_DATA_DIR`). ~0.22 s/chapter: Shadow Slave's 3,026
-  chapters in 11 min (whole chunks before windows took ~0.12 s; embedding one chapter per call,
+  chapters in 11 min (31 min on 2026-10-27 with the machine fully loaded; chapter 476 is empty
+  in the source, so 3,025 are stored) (whole chunks before windows took ~0.12 s; embedding one chapter per call,
   ~0.18 s). Chapters are searchable as they land; the task's progress meta has
   `searchable_up_to`, which the web UI shows. Extraction ~20s/chapter.
 - **End-to-end tests:** run in a separate project so the dev data stays out:
@@ -112,6 +127,11 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   matching and display.
 - **`current_chapter` is required** on every character endpoint (it defaulted to 9999: the
   filter failed open). **`novel_id` is required** end to end and NOT NULL in every table.
+- **Frontend state belongs to one novel and position.** Ask is keyed by novel and hides
+  answers asked at a later chapter after a rewind; Summary is keyed by novel and chapter; the
+  progress form is keyed by novel and saved chapter and cannot save before the novel's
+  progress has loaded. One shared input carried a novel's chapter to the next, and Save wrote
+  it there. Fetches check `resp.ok`: errors used to show as answers or successful saves.
 - **No blocking calls in `async def` handlers** (`tests/test_event_loop.py` enforces this):
   use plain `def` handlers or `run_in_threadpool`.
 - **Chapter numbers are reading order** and the spoiler filter trusts them. The JSON adapter
@@ -131,7 +151,9 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   5 of the Hound it named the culprit from memory 7/20 times until the rules went into the
   system message (0/40). Keep `system_prompt()` in `llm_client.py`.
 - **EPUB chapters come from the spine plus the table of contents**, front and back matter
-  dropped by title, Project Gutenberg boilerplate clipped at its START/END markers.
+  dropped by title, Project Gutenberg boilerplate clipped at its START/END markers. Entries
+  under 100 words (title pages) are dropped unless titled as a chapter or prologue/epilogue:
+  a dropped short chapter renumbered every chapter after it, so a reader at chapter 2 got 3.
 - Never `pgrep -f`/`pkill -f` a pattern containing literal text from your own command (it
   matches the shell running it and kills it, exit 144). Use a bracket: `800[3]`, `vll[m]`.
 - In `tasks.py`, SQLAlchemy `text` is imported as `sa_text` to avoid shadowing.
@@ -182,16 +204,20 @@ Each novel gets its own ChromaDB collection (`novel_{id}`).
   sections of at most 2,500 words: in one pass, 3,500-word chapters lost their endings.
 - **Chunks are searched through windows.** all-MiniLM-L6-v2 reads the first 256 tokens of a
   text and ignores the rest: 400-word chunks (~500 tokens) left ~46% of the book invisible to
-  search. Each chunk is stored as windows of ≤170 words (the most that always fit, measured);
+  search. Each chunk is stored as windows of ≤170 words, which fit 256 tokens in 99.8% of
+  cases (47 of Shadow Slave's 28,751 windows ran over, to 368 tokens: names and curly quotes
+  take extra tokens), so a window the model's tokenizer says does not fit is split again;
   a search ranks windows and returns whole chunks. Measured (eval/experiments/chunk_windows.py):
   the answer was retrieved for 17 of 25 Hound fact questions instead of 12, and 140 of 262
   Shadow Slave questions instead of 110; hand-graded answers 16.8 → 20.5 of 30, fewer wrong.
   170-word chunks returned as 12 passages retrieved as well but answered worse (fragments).
   Live after re-ingesting: Hound 16 of 25, Shadow Slave 140 of 262. `WINDOW_SIZE` must stay
   within 256 tokens; changing either size means re-ingesting. Collections stored before
-  windows still work (each chunk counts as one window). `split_windows` must lose nothing
-  (`_chapter_text` and search rebuild chunks from windows): a merge bug once dropped text
-  only when a chunk's last window was under 50 characters, so test every length.
+  windows still work (each chunk counts as one window). `chunk_text` and `split_windows` must
+  lose nothing (`_chapter_text` and search rebuild chunks from windows; summaries are written
+  from that): a merge bug once dropped text only when a chunk's last window was under 50
+  characters, and `chunk_text` dropped chapter endings under 50 characters as "noise" (13
+  Shadow Slave chapters, e.g. 331's "…The Spire Messenger was dead."), so test every length.
 - Never pipe `scripts/start_vllm.sh` into `head` or similar: the closed pipe kills the script
   before `docker compose up` runs, and the model silently never starts.
 - **Evaluation scores in code, not with an LLM judge.** Mistral Nemo graded "not revealed" as

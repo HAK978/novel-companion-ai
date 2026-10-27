@@ -1,5 +1,7 @@
 """Ingestion API and the per-chapter pipeline, with Chroma/Postgres stubbed."""
 
+from types import SimpleNamespace
+
 import pytest
 from conftest import load_module
 from fastapi.testclient import TestClient
@@ -301,3 +303,19 @@ def test_names_from_later_chapters_are_flagged_until_then(ingestion_tasks):
 
     assert ingestion_tasks._unverified_names("Sunny meets Nephis.", first, 3) == ["Nephis"]
     assert ingestion_tasks._unverified_names("Sunny meets Nephis.", first, 5) == []
+
+
+def test_windows_are_split_until_the_embedding_model_reads_them_whole(ingestion_tasks,
+                                                                      monkeypatch):
+    # the model drops what runs past its 256 tokens without a word; 170 words usually fit
+    class ReadsThirtyWords:
+        def encode(self, text):
+            return SimpleNamespace(overflowing=["the rest"] if len(text.split()) > 30 else [])
+
+    monkeypatch.setattr(ingestion_tasks, "_tokenizer", ReadsThirtyWords())
+    chunk = " ".join(f"Sentence {i} ends here." for i in range(40))
+
+    windows = [w for _, _, w in ingestion_tasks._windows([chunk])]
+
+    assert all(len(w.split()) <= 30 for w in windows)
+    assert " ".join(windows) == chunk

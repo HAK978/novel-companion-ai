@@ -227,8 +227,8 @@ def withhold_unread_names(request: WithholdRequest):
 @app.post("/delete-collection")
 def delete_col(request: DeleteCollectionRequest):
     name = f"novel_{request.novel_id}"
-    success = delete_collection(name)
-    return {"collection": name, "deleted": success}
+    # "deleted" or "absent"; any other failure is an HTTP 500, never a quiet "not deleted"
+    return {"collection": name, "status": delete_collection(name)}
 
 
 @app.get("/health")

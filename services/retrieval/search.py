@@ -2,6 +2,7 @@ import re
 from typing import Any
 
 import chromadb
+from chromadb.errors import NotFoundError
 from config import CHROMADB_URL
 from vector_store import open_collection
 
@@ -118,11 +119,13 @@ def _chunk_texts(collection, keys: list[tuple[int, int]]) -> dict[tuple[int, int
     return {key: " ".join(text for _, text in sorted(parts)) for key, parts in windows.items()}
 
 
-def delete_collection(collection_name: str):
-    client = _get_client()
+def delete_collection(collection_name: str) -> str:
+    """Delete a collection: "deleted", or "absent" when there was none. Any other failure
+    raises. Both used to come back as False, so a deletion that failed looked like an empty
+    slot, and a new novel reusing the id could inherit another novel's text."""
+    _collections.pop(collection_name, None)
     try:
-        client.delete_collection(collection_name)
-        _collections.pop(collection_name, None)
-        return True
-    except Exception:
-        return False
+        _get_client().delete_collection(collection_name)
+    except NotFoundError:
+        return "absent"
+    return "deleted"

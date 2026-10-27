@@ -18,9 +18,23 @@ def test_clean_html_handles_empty_input(chunking, empty):
     assert chunking.clean_html(empty) == ""
 
 
-def test_chunk_text_drops_fragments_below_minimum(chunking):
-    # Chunks shorter than 50 characters are noise (stray headings, page numbers)
-    assert chunking.chunk_text("Too short.") == []
+def test_a_short_chapter_ending_is_kept(chunking):
+    # pieces under 50 characters were dropped as noise: Shadow Slave's chapter 331 lost its
+    # last line, "…The Spire Messenger was dead."
+    text = " ".join(f"Sentence {i} ends here." for i in range(100)) + " He was dead."
+
+    chunks = chunking.chunk_text(text, chunk_size=400)
+
+    assert chunks[-1].endswith("He was dead.")
+    assert chunking.chunk_text("Too short.") == ["Too short."]
+
+
+def test_chunks_never_lose_or_repeat_text(chunking):
+    # every length up to two full chunks, so every kind of ending comes up
+    words = [f"w{i}" + ("." if i % 7 == 3 else "") for i in range(900)]
+    for n in range(1, 901):
+        text = " ".join(words[:n])
+        assert " ".join(chunking.chunk_text(text, 400)) == text, n
 
 
 def test_chunk_text_splits_long_text(chunking):
@@ -122,3 +136,28 @@ def test_windows_never_lose_or_repeat_text(chunking):
     for n in range(1, 801):
         chunk = " ".join(words[:n])
         assert " ".join(chunking.split_windows(chunk, 170)) == chunk, n
+
+
+def test_windows_the_model_cannot_read_whole_are_split_again(chunking):
+    # 170 words nearly always fit the model's 256 tokens, but names and curly quotes take
+    # extra tokens: 47 of Shadow Slave's 28,751 windows ran over
+    chunk = " ".join(f"Sentence {i} ends here." for i in range(40))
+
+    def fits(text):  # a model that reads 25 words
+        return len(text.split()) <= 25
+
+    windows = chunking.split_windows(chunk, 170, fits)
+
+    assert all(fits(w) for w in windows)
+    assert " ".join(windows) == chunk
+    assert all(w.endswith(".") for w in windows)  # cut at sentence ends
+
+
+def test_a_window_without_sentence_ends_is_split_between_words(chunking):
+    chunk = " ".join(f"w{i}" for i in range(60))
+
+    windows = chunking.split_windows(chunk, 170, lambda text: len(text.split()) <= 20)
+
+    assert " ".join(windows) == chunk
+    assert all(len(w.split()) <= 20 for w in windows)
+

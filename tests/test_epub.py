@@ -166,3 +166,35 @@ def test_first_n_chapters(reader, tmp_path):
                      toc=[(f"Chapter {i}", f"c{i}.xhtml#c{i}") for i in range(1, 6)], spine=list(files))
 
     assert [c["number"] for c in chapters(reader, path, max_chapters=2)] == [1, 2]
+
+
+def test_a_short_chapter_keeps_its_place(reader, tmp_path):
+    # chapters under 100 words were dropped and the rest renumbered, so a reader at
+    # chapter 2 was given chapter 3
+    files = {
+        "c1.xhtml": f"<h1 id='c1'>Chapter 1</h1>{prose('one')}",
+        "c2.xhtml": "<h1 id='c2'>Chapter 2</h1><p>He waited.</p>",
+        "c3.xhtml": f"<h1 id='c3'>Chapter 3</h1>{prose('three')}",
+    }
+    path = make_epub(tmp_path / "b.epub", files, toc=[
+        ("Chapter 1", "c1.xhtml#c1"), ("Chapter 2", "c2.xhtml#c2"), ("Chapter 3", "c3.xhtml#c3"),
+    ], spine=list(files))
+
+    found = chapters(reader, path)
+
+    assert [(c["number"], c["title"]) for c in found] == [
+        (1, "Chapter 1"), (2, "Chapter 2"), (3, "Chapter 3")]
+    assert "He waited." in found[1]["content"]
+
+
+def test_a_part_title_page_is_not_a_chapter(reader, tmp_path):
+    files = {
+        "p1.xhtml": "<h1 id='p1'>Part One</h1>",
+        "c1.xhtml": f"<h1 id='c1'>Chapter 1</h1>{prose('one')}",
+        "c2.xhtml": f"<h1 id='c2'>Chapter 2</h1>{prose('two')}",
+    }
+    path = make_epub(tmp_path / "b.epub", files, toc=[
+        ("Part One", "p1.xhtml#p1"), ("Chapter 1", "c1.xhtml#c1"), ("Chapter 2", "c2.xhtml#c2"),
+    ], spine=list(files))
+
+    assert [c["title"] for c in chapters(reader, path)] == ["Chapter 1", "Chapter 2"]

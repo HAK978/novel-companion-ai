@@ -27,6 +27,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>('Ask')
 
   const currentChapter = selectedNovel ? progress[selectedNovel.id] ?? 1 : 1
+  // until the server says where the reader is, nothing may be saved as their position
+  const progressLoaded = selectedNovel ? progress[selectedNovel.id] !== undefined : false
 
   const setCurrentChapter = (chapter: number) => {
     if (selectedNovel) {
@@ -36,7 +38,7 @@ export default function Home() {
 
   useEffect(() => {
     fetch(`${API}/novels`)
-      .then(r => r.json())
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then(data => {
         setNovels(data)
         if (data.length > 0) setSelectedNovel(data[0])
@@ -50,10 +52,10 @@ export default function Home() {
     let cancelled = false
 
     fetch(`${API}/progress/${novelId}/default`)
-      .then(r => r.json())
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then(data => {
-        if (!cancelled && data.current_chapter) {
-          setProgress(prev => ({ ...prev, [novelId]: data.current_chapter }))
+        if (!cancelled) {
+          setProgress(prev => ({ ...prev, [novelId]: data.current_chapter ?? 1 }))
         }
       })
       .catch(() => {})
@@ -110,7 +112,7 @@ export default function Home() {
         {activeTab === 'Settings' ? (
           <SettingsTab
             apiUrl={API} novelId={selectedNovel?.id ?? null} currentChapter={currentChapter}
-            setCurrentChapter={setCurrentChapter} novels={novels}
+            progressLoaded={progressLoaded} setCurrentChapter={setCurrentChapter} novels={novels}
             setNovels={setNovels} setSelectedNovel={setSelectedNovel}
           />
         ) : !selectedNovel ? (
@@ -124,15 +126,20 @@ export default function Home() {
             </button>
           </div>
         ) : (
+          // Keyed so each novel gets fresh state: a chat, a recap or a late reply from one
+          // novel stayed on screen after switching to another
           <>
             {activeTab === 'Ask' && (
-              <AskTab apiUrl={API} novelId={selectedNovel.id} currentChapter={currentChapter} />
+              <AskTab key={selectedNovel.id} apiUrl={API} novelId={selectedNovel.id}
+                currentChapter={currentChapter} />
             )}
             {activeTab === 'Characters' && (
               <CharactersTab apiUrl={API} novelId={selectedNovel.id} currentChapter={currentChapter} />
             )}
             {activeTab === 'Summary' && (
-              <SummaryTab apiUrl={API} novelId={selectedNovel.id} currentChapter={currentChapter} />
+              // and each reading position: a recap written further on stays out of view
+              <SummaryTab key={`${selectedNovel.id}:${currentChapter}`} apiUrl={API}
+                novelId={selectedNovel.id} currentChapter={currentChapter} />
             )}
           </>
         )}

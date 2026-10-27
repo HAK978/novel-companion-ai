@@ -23,42 +23,85 @@ type Novel = {
   total_chapters: number
 }
 
-export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurrentChapter, novels, setNovels, setSelectedNovel }: {
+// Rendered with a key of novel and saved chapter, so it always starts from the active novel's
+// position: one input shared by every novel kept the last novel's chapter after a switch,
+// and Save wrote it to the new one, which could unlock a whole book.
+function ProgressForm({ apiUrl, novelId, currentChapter, loaded, setCurrentChapter }: {
+  apiUrl: string
+  novelId: number
+  currentChapter: number
+  loaded: boolean
+  setCurrentChapter: (ch: number) => void
+}) {
+  const [chapter, setChapter] = useState(currentChapter)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const saveProgress = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      const resp = await fetch(`${apiUrl}/progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ novel_id: novelId, current_chapter: chapter, user_id: 'default' }),
+      })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      setCurrentChapter(chapter)
+    } catch {
+      setError('Could not save your position.')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        type="number"
+        value={chapter}
+        onChange={(e) => setChapter(Number(e.target.value))}
+        min={1}
+        className="w-28 bg-[#0a0a0a] border border-[#2a2a2a] rounded px-3 py-1.5 text-sm"
+      />
+      <button
+        onClick={saveProgress}
+        disabled={saving || !loaded}
+        className="bg-[#3b82f6] text-white px-4 py-1.5 rounded-lg text-sm disabled:opacity-50"
+      >
+        {saving ? 'Saving...' : 'Save'}
+      </button>
+      <span className="text-xs text-[#737373]">
+        {loaded ? `Currently: Ch. ${currentChapter}` : 'Loading your position...'}
+      </span>
+      {error && <span className="text-xs text-red-400">{error}</span>}
+    </div>
+  )
+}
+
+export default function SettingsTab({ apiUrl, novelId, currentChapter, progressLoaded, setCurrentChapter, novels, setNovels, setSelectedNovel }: {
   apiUrl: string
   novelId: number | null
   currentChapter: number
+  progressLoaded: boolean
   setCurrentChapter: (ch: number) => void
   novels: Novel[]
   setNovels: (novels: Novel[]) => void
   setSelectedNovel: (novel: Novel | null) => void
 }) {
-  const [chapter, setChapter] = useState(currentChapter)
-  const [saving, setSaving] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newAuthor, setNewAuthor] = useState('')
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
   const [ingestPath, setIngestPath] = useState('')
   const [ingestMax, setIngestMax] = useState<number | ''>('')
   const [ingesting, setIngesting] = useState(false)
   const [ingestStatus, setIngestStatus] = useState('')
   const [health, setHealth] = useState<Health | null>(null)
 
-  const saveProgress = async () => {
-    setSaving(true)
-    try {
-      await fetch(`${apiUrl}/progress`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ novel_id: novelId, current_chapter: chapter, user_id: 'default' }),
-      })
-      setCurrentChapter(chapter)
-    } catch { /* ignore */ }
-    setSaving(false)
-  }
-
   const createNovel = async () => {
     if (!newTitle.trim()) return
     setCreating(true)
+    setCreateError('')
     try {
       const resp = await fetch(`${apiUrl}/novels`, {
         method: 'POST',
@@ -66,12 +109,20 @@ export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurren
         body: JSON.stringify({ title: newTitle, author: newAuthor || null }),
       })
       const data = await resp.json()
+      if (!resp.ok) {
+        // a refusal used to be added to the list as a novel with no id
+        setCreateError(data.detail || 'Could not create the novel.')
+        setCreating(false)
+        return
+      }
       const novel: Novel = { id: data.id, title: newTitle, author: newAuthor || null, total_chapters: 0 }
       setNovels([...novels, novel])
       setSelectedNovel(novel)
       setNewTitle('')
       setNewAuthor('')
-    } catch { /* ignore */ }
+    } catch {
+      setCreateError('Error connecting to server.')
+    }
     setCreating(false)
   }
 
@@ -91,7 +142,10 @@ export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurren
         }),
       })
       const data = await resp.json()
-      if (data.task_id) {
+      if (!resp.ok || !data.task_id) {
+        setIngestStatus(typeof data.detail === 'string' ? data.detail : 'Could not start the ingest.')
+        setIngesting(false)
+      } else {
         setIngestStatus(`Queued (task: ${data.task_id.slice(0, 8)}...)`)
         // Poll for completion
         const poll = setInterval(async () => {
@@ -135,23 +189,11 @@ export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurren
       <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4">
         <h2 className="text-lg font-bold mb-2">Reading Progress</h2>
         <p className="text-sm text-[#737373] mb-3">Set your current chapter to control spoiler filtering</p>
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            value={chapter}
-            onChange={(e) => setChapter(Number(e.target.value))}
-            min={1}
-            className="w-28 bg-[#0a0a0a] border border-[#2a2a2a] rounded px-3 py-1.5 text-sm"
-          />
-          <button
-            onClick={saveProgress}
-            disabled={saving}
-            className="bg-[#3b82f6] text-white px-4 py-1.5 rounded-lg text-sm disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-          <span className="text-xs text-[#737373]">Currently: Ch. {currentChapter}</span>
-        </div>
+        <ProgressForm
+          key={`${novelId}:${currentChapter}`} apiUrl={apiUrl} novelId={novelId}
+          currentChapter={currentChapter} loaded={progressLoaded}
+          setCurrentChapter={setCurrentChapter}
+        />
       </div>
       )}
 
@@ -181,6 +223,7 @@ export default function SettingsTab({ apiUrl, novelId, currentChapter, setCurren
         >
           {creating ? 'Creating...' : 'Create Novel'}
         </button>
+        {createError && <p className="text-xs text-red-400 mt-2">{createError}</p>}
       </div>
 
       {/* Ingest Chapters — chapters are ingested into a specific novel */}

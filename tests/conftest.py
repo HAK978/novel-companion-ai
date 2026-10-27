@@ -11,6 +11,7 @@ import importlib.util
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlparse
 
 import pytest
@@ -69,9 +70,19 @@ def retrieval_main():
     return load_module("retrieval", "main.py")
 
 
+class FitsEverything:
+    """Stands in for the embedding model's tokenizer, which needs the model downloaded: every
+    text fits, so windows are cut by word count alone."""
+
+    def encode(self, text):
+        return SimpleNamespace(overflowing=[])
+
+
 @pytest.fixture(scope="session")
 def ingestion_tasks():
-    return load_module("ingestion", "tasks.py")
+    module = load_module("ingestion", "tasks.py")
+    module._tokenizer = FitsEverything()
+    return module
 
 
 def load_script(filename: str, alias: str):

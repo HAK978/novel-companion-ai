@@ -10,8 +10,10 @@ GENERATION_SERVICE_URL = os.environ.get("GENERATION_SERVICE_URL", "http://localh
 # Passages the model answering a question reads, in words
 CHUNK_SIZE = 400
 # The embedding model reads only the first 256 tokens of a text, about half of a chunk, so
-# chunks are searched through smaller windows: 170 words always fit (measured on the Hound
-# and Shadow Slave 1-300). Windows are 2.7x as many vectors as chunks.
+# chunks are searched through smaller windows. 170 words fit 256 tokens in 99.8% of windows
+# (all of the Hound and Shadow Slave 1-300; 47 of 28,751 over the whole of Shadow Slave):
+# a window that still does not fit is split again by tokens (tasks._window_fits). Windows
+# are 2.7x as many vectors as chunks.
 WINDOW_SIZE = 170
 
 # Chapter summaries are written in the background, only as far as readers have got plus this

@@ -26,13 +26,18 @@ _NUMBERED = re.compile(
     re.IGNORECASE,
 )
 _STORY_BOOKENDS = re.compile(r"^\s*(prologue|epilogue)\b", re.IGNORECASE)
+# Titles that name one chapter, whatever its length ("Part Two" is a divider page)
+_CHAPTER = re.compile(r"^\s*chapter\s+([0-9]+|[ivxlcdm]+|[a-z]+)\b|^\s*([0-9]+|[ivxlcdm]+)\s*[.:)]",
+                      re.IGNORECASE)
 _BODY = re.compile(r"<body[^>]*>(.*)</body>", re.IGNORECASE | re.DOTALL)
 # Project Gutenberg brackets every book with these markers, a published convention meant
 # for exactly this: without the clip, the license preamble ended up in the last chapter.
 _PG_START = re.compile(r"\*\*\*\s*START OF (?:THE|THIS) PROJECT GUTENBERG EBOOK[^*]*\*\*\*",
                        re.IGNORECASE)
 _PG_END = re.compile(r"\*\*\*\s*END OF (?:THE|THIS) PROJECT GUTENBERG EBOOK", re.IGNORECASE)
-# a short entry that survives the filters is a title or half-title page, not a chapter
+# a short entry that survives the filters is a title or half-title page, not a chapter,
+# unless its title says it is one: a short chapter dropped here renumbered every chapter after
+# it, so a reader at chapter 2 was given chapter 3
 _MIN_WORDS = 100
 
 
@@ -136,4 +141,5 @@ class EpubAdapter(BaseAdapter):
                 last += 1
             spans = spans[first: last + 1]
 
-        return [(t, h) for t, h in spans if _word_count(h) >= _MIN_WORDS]
+        return [(t, h) for t, h in spans if _word_count(h) >= _MIN_WORDS
+                or _CHAPTER.search(t) or _STORY_BOOKENDS.search(t)]

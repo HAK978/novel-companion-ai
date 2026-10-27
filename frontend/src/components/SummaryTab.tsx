@@ -43,8 +43,12 @@ export default function SummaryTab({ apiUrl, novelId, currentChapter }: {
         }),
       })
       const data = await resp.json()
-      setSummary(data.summary || data.error || 'No summary generated.')
-      setCached(data.cached || false)
+      if (!resp.ok) {
+        setSummary(typeof data.detail === 'string' ? data.detail : `Could not summarize (HTTP ${resp.status}).`)
+      } else {
+        setSummary(data.summary || data.error || 'No summary generated.')
+        setCached(data.cached || false)
+      }
     } catch {
       setSummary('Error connecting to the server.')
     }
@@ -61,7 +65,9 @@ export default function SummaryTab({ apiUrl, novelId, currentChapter }: {
         body: JSON.stringify({ novel_id: novelId, user_id: 'default' }),
       })
       const data = await resp.json()
-      setCatchUpResult(data)
+      setCatchUpResult(resp.ok ? data : {
+        error: typeof data.detail === 'string' ? data.detail : `Could not catch you up (HTTP ${resp.status}).`,
+      })
     } catch {
       setCatchUpResult({ error: 'Error connecting to the server.' })
     }

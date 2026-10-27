@@ -13,6 +13,7 @@ from config import (
 from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 
@@ -65,9 +66,12 @@ class QueryResponse(BaseModel):
     answer: str | None
     model_used: str = "none"
     sources: list[ChunkResult]
-    # "chapter summaries" when a question about recent events was answered from the stored
-    # summaries of the chapters before the reader's, "passages" when from search results
+    # "chapter summaries" when a recap was answered from the stored summaries of its
+    # chapters, "passages" when from search results
     source: str = "passages"
+    # [first, last] chapter the question was limited to, when it named some ("the last 3
+    # chapters", "so far", "chapter 12"); None when it could draw on every chapter read
+    scope: list[int] | None = None
     # "withheld" when the answer, or a chapter summary it drew on, named something the reader
     # has not reached and it was taken out; never what, since that would be the spoiler
     spoiler_check: str = "clean"
@@ -117,13 +121,16 @@ async def create_novel(request: NovelCreate):
             resp = await client.post(
                 f"{RETRIEVAL_SERVICE_URL}/delete-collection", json={"novel_id": novel_id}
             )
-            resp.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx.HTTPError:
+            resp = None
+        if (resp is None or resp.status_code != 200
+                or resp.json().get("status") not in ("deleted", "absent")):
+            # a deletion that failed is not an empty collection: it used to be accepted
             raise HTTPException(
                 status_code=503,
-                detail="Retrieval service unavailable: cannot confirm the new novel's "
-                       "vector collection is empty, so the novel was not created.",
-            ) from exc
+                detail="Could not confirm the new novel's vector collection is empty, so the "
+                       "novel was not created.",
+            )
 
     def insert():
         with engine.connect() as conn:
@@ -219,6 +226,16 @@ def _delete_novel_rows(novel_id: int) -> None:
         conn.commit()
 
 
+def _relay(resp) -> JSONResponse:
+    """A downstream reply passed on with its status code: errors used to arrive as 200s, so
+    a failed ingest or lookup looked like a successful one."""
+    try:
+        body = resp.json()
+    except ValueError:
+        raise HTTPException(status_code=502, detail="Unreadable reply from a service") from None
+    return JSONResponse(body, status_code=resp.status_code)
+
+
 # --- Ingestion ---
 
 @app.post("/ingest")
@@ -228,7 +245,7 @@ async def ingest(request: IngestRequest):
             f"{INGESTION_SERVICE_URL}/ingest",
             json=request.model_dump(),
         )
-    return resp.json()
+    return _relay(resp)
 
 
 @app.post("/ingest/from-source")
@@ -238,14 +255,14 @@ async def ingest_from_source(request: IngestFromSourceRequest):
             f"{INGESTION_SERVICE_URL}/ingest/from-source",
             json=request.model_dump(),
         )
-    return resp.json()
+    return _relay(resp)
 
 
 @app.get("/ingest/status/{task_id}")
 async def ingest_status(task_id: str):
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(f"{INGESTION_SERVICE_URL}/ingest/status/{task_id}")
-    return resp.json()
+    return _relay(resp)
 
 
 # --- Characters ---
@@ -257,7 +274,7 @@ async def list_characters(novel_id: int, current_chapter: int):
             f"{RETRIEVAL_SERVICE_URL}/characters",
             params={"novel_id": novel_id, "current_chapter": current_chapter},
         )
-    return resp.json()
+    return _relay(resp)
 
 
 @app.get("/characters/{name}")
@@ -267,7 +284,7 @@ async def character_recall(name: str, novel_id: int, current_chapter: int):
             f"{RETRIEVAL_SERVICE_URL}/characters/{name}",
             params={"novel_id": novel_id, "current_chapter": current_chapter},
         )
-    return resp.json()
+    return _relay(resp)
 
 
 # --- Query ---
@@ -305,22 +322,71 @@ async def _generate_checked(client, payload: dict, novel_id: int, said: str) -> 
     return data, "withheld"
 
 
-# Questions about what happened lately, answered from chapter summaries rather than search
-_RECENT = re.compile(
-    r"\b(recently|lately|so far|recap|catch me up|last (?:few |couple of |(\d+) )?chapters?|"
-    r"(?:just|recently) happened|what (?:just )?happened (?:recently|lately|last))\b", re.I)
-RECENT_CHAPTERS = 10
+# --- What a question is about ---------------------------------------------------------
+#
+# Read deterministically, as two separate things: the chapters a question limits itself to,
+# and whether it asks for a recap of events (answered from chapter summaries) or something
+# specific (answered from the book's own passages within those chapters). One keyword used to
+# decide both: "so far" meant the last 10 chapters, "the last couple of chapters" meant 10,
+# and "Why did Sunny change his mind recently?" was answered from summaries alone, which get
+# who-did-what wrong about 1 time in 5.
+
+RECENT_CHAPTERS = 10  # "recently", or a recap that names no chapters
+_COUNTS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+           "eight": 8, "nine": 9, "ten": 10, "couple of": 2, "couple": 2, "few": 3,
+           "several": 5}
+_COUNT_WORDS = "|".join(w.replace(" ", r"\s+") for w in sorted(_COUNTS, key=len, reverse=True))
+_EXPLICIT = re.compile(r"\bchapters?\s+(\d+)(?:\s*(?:-|\u2013|to|through|and)\s*(\d+))?", re.I)
+_LAST = re.compile(rf"\b(?:last|past|previous)\s+(?:(\d+|{_COUNT_WORDS})\s+)?chapters?\b", re.I)
+_RECENTLY = re.compile(r"\b(?:recently|lately)\b", re.I)
+_SO_FAR = re.compile(r"\b(?:so far|until now|up to now|up until now)\b", re.I)
+_RECAP_REQUEST = re.compile(
+    r"\b(?:recap|catch me up|summari[sz]e|summary|what did i miss|bring me up to speed)\b", re.I)
+_WHAT_HAPPENED = re.compile(
+    r"^\W*(?:so\W+)?what(?:['\u2019]s|\s+has|\s+have|\s+had)?\s+(?:just\s+)?happen(?:ed|s)\b(.*)$",
+    re.I | re.S)
+# words that only place a question in time: what remains after them is its subject
+_PLACING = re.compile(rf"\b(?:in|over|during|the|so|far|until|up|now|recently|lately|chapters?|"
+                      rf"last|past|previous|and|through|to|\d+|{_COUNT_WORDS})\b|[^\w\s]", re.I)
 
 
-def _recent_range(question: str, chapter: int) -> tuple[int, int] | None:
-    """The chapters a recent-events question is about: the last N before the reader's, N as
-    asked ("the last 5 chapters") or 10."""
-    match = _RECENT.search(question)
-    if not match:
-        return None
-    count = min(int(match.group(2)) if match.group(2) else RECENT_CHAPTERS,
-                RECAP_FROM_SUMMARIES_MAX)
-    return max(1, chapter - count + 1), chapter
+def _question_scope(question: str, chapter: int) -> tuple[int, int] | None:
+    """The chapters a question is about, when it says: "chapter 12", "chapters 3 to 5", "the
+    last 3 chapters", "recently" (the last 10), "so far" (every chapter read). The end never
+    passes the reader's chapter; a start past it comes back as asked, for the caller to refuse."""
+    if match := _EXPLICIT.search(question):
+        first, last = int(match.group(1)), int(match.group(2) or match.group(1))
+        return min(first, last), min(max(first, last), chapter)
+    if match := _LAST.search(question):
+        word = " ".join((match.group(1) or "one").lower().split())
+        count = max(1, int(word) if word.isdigit() else _COUNTS[word])
+        return max(1, chapter - count + 1), chapter
+    if _RECENTLY.search(question):
+        return max(1, chapter - RECENT_CHAPTERS + 1), chapter
+    if _SO_FAR.search(question):
+        return 1, chapter
+    return None
+
+
+def _is_recap(question: str) -> bool:
+    """Whether a question asks for a recap of events rather than something specific: "Catch me
+    up", "What has happened so far?", but not "What happened to Sunny's sword?"."""
+    if _RECAP_REQUEST.search(question):
+        return True
+    match = _WHAT_HAPPENED.match(question)
+    return bool(match) and not _PLACING.sub(" ", match.group(1)).strip()
+
+
+def _recap_note(scope: tuple[int, int], covered: tuple[int, int] | None) -> str:
+    """What a recap answer must say about its coverage, or "" when it covers what was asked:
+    the reader should not take a partial recap for a whole one."""
+    if covered is None:
+        return (f"\n\n(Summaries of chapters {scope[0]}\u2013{scope[1]} are not ready yet, so this "
+                f"is from a search of those chapters, not a full recap.)")
+    if covered[0] > scope[0]:
+        return (f"\n\n(This recap covers chapters {covered[0]}\u2013{covered[1]}: a recap reads at "
+                f"most {RECAP_FROM_SUMMARIES_MAX} chapters at a time.)")
+    return ""
 
 
 async def _withheld_summaries(client, novel_id: int, chapter: int, stored: list, said: str
@@ -343,38 +409,55 @@ async def _withheld_summaries(client, novel_id: int, chapter: int, stored: list,
     return kept, sum(c.get("withheld", 0) for c in checked)
 
 
+def _check(resp, service: str) -> None:
+    """A failed downstream call is an error, not an empty result: a failed search used to come
+    back as "nothing found"."""
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"{service} service failed")
+
+
 @app.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest):
-    collection_name = f"novel_{request.novel_id}"
-
-    recent = _recent_range(request.query, request.current_chapter)
-    stored = (await run_in_threadpool(_chapter_summaries, request.novel_id, *recent)
-              if recent else [])
+    chapter = request.current_chapter
+    said = f"{request.query} {request.conversation_context}"
+    scope = _question_scope(request.query, chapter)
+    if scope and scope[0] > chapter:
+        # the same reply for every chapter past the reader's, before any search
+        return QueryResponse(answer=f"You haven't reached chapter {scope[0]} yet.", sources=[],
+                             scope=list(scope))
+    recap = _is_recap(request.query)
+    if recap and scope is None:
+        scope = (max(1, chapter - RECENT_CHAPTERS + 1), chapter)
+    covered, stored = None, []
+    if recap:
+        # search has no sense of time (asked at chapter 1291 it offered chapters 527 and 398 as
+        # "the last few"), so a recap reads the summaries of its chapters in order, the last
+        # RECAP_FROM_SUMMARIES_MAX of them when it asks for more, and says so
+        covered = (max(scope[0], scope[1] - RECAP_FROM_SUMMARIES_MAX + 1), scope[1])
+        stored = await run_in_threadpool(_chapter_summaries, request.novel_id, *covered)
+        covered = covered if stored else None
     async with httpx.AsyncClient(timeout=120) as client:
         summaries_withheld = 0
         if stored:
-            # a question about recent events: search has no sense of time (asked at chapter
-            # 1291 it described chapters 527 and 398 as "the last few"), so read the summaries
-            # of the chapters just before the reader's, in order
             stored, summaries_withheld = await _withheld_summaries(
-                client, request.novel_id, request.current_chapter, stored,
-                said=f"{request.query} {request.conversation_context}")
+                client, request.novel_id, chapter, stored, said=said)
             results = [{"text": summary, "chapter_number": n, "chapter_title": title,
                         "relevance_score": 1.0} for n, title, summary in stored]
         else:
-            retrieval_resp = await client.post(
-                f"{RETRIEVAL_SERVICE_URL}/search",
-                json={
-                    "query": request.query,
-                    "current_chapter": request.current_chapter,
-                    "n_results": request.n_results,
-                    "collection_name": collection_name,
-                },
-            )
+            # within the question's chapters when it names some: a recap whose summaries were
+            # missing used to search the whole book, and present older events as recent
+            retrieval_resp = await client.post(f"{RETRIEVAL_SERVICE_URL}/search", json={
+                "query": request.query,
+                "current_chapter": scope[1] if scope else chapter,
+                "n_results": request.n_results,
+                "collection_name": f"novel_{request.novel_id}",
+                **({"min_chapter": scope[0]} if scope else {}),
+            })
+            _check(retrieval_resp, "Retrieval")
             results = retrieval_resp.json().get("results", [])
 
         if not results:
-            return QueryResponse(answer=None, sources=[])
+            return QueryResponse(answer=None, sources=[], scope=list(scope) if scope else None)
 
         # Label each passage with its chapter so the model can see (and say)
         # when retrieved passages come from distant parts of the story
@@ -386,8 +469,8 @@ async def query(request: QueryRequest):
             "query": request.query,
             "context_chunks": context_chunks,
             "conversation_context": request.conversation_context,
-            "current_chapter": request.current_chapter,
-        }, request.novel_id, said=f"{request.query} {request.conversation_context}")
+            "current_chapter": chapter,
+        }, request.novel_id, said=said)
 
     def record_search():
         with engine.connect() as conn:
@@ -403,11 +486,15 @@ async def query(request: QueryRequest):
 
     await run_in_threadpool(record_search)
 
+    answer = gen_data.get("answer")
+    if recap and answer:
+        answer += _recap_note(scope, covered)
     return QueryResponse(
-        answer=gen_data.get("answer"),
+        answer=answer,
         model_used=gen_data.get("model_used", "none"),
         sources=results,
         source="chapter summaries" if stored else "passages",
+        scope=list(scope) if scope else None,
         spoiler_check="withheld" if summaries_withheld else check,
     )
 
@@ -500,18 +587,20 @@ async def summarize(request: SummarizeRequest):
             "cached": True,
         }
 
-    stored = await run_in_threadpool(_chapter_summaries, request.novel_id,
-                                     request.start_chapter, end_ch)
+    # every chapter of the range, in order (ten search hits covered a few moments of it): the
+    # last RECAP_FROM_SUMMARIES_MAX of them when the range is wider, and the recap says so
+    covered = (max(request.start_chapter, end_ch - RECAP_FROM_SUMMARIES_MAX + 1), end_ch)
+    stored = await run_in_threadpool(_chapter_summaries, request.novel_id, *covered)
     collection_name = f"novel_{request.novel_id}"
     async with httpx.AsyncClient(timeout=120) as client:
         if stored:
             stored, _ = await _withheld_summaries(client, request.novel_id, end_ch, stored,
                                                   said="")
         if stored:
-            # every chapter of the range, in order: ten search hits covered a few moments of it
             source = "chapter summaries"
             context = [f"[Chapter {n}: {title}]\n{text}" for n, title, text in stored]
         else:
+            covered = None
             source = "passages"
             retrieval_resp = await client.post(
                 f"{RETRIEVAL_SERVICE_URL}/search",
@@ -525,6 +614,7 @@ async def summarize(request: SummarizeRequest):
                     "min_chapter": request.start_chapter,
                 },
             )
+            _check(retrieval_resp, "Retrieval")
             results = retrieval_resp.json().get("results", [])
             if not results:
                 return {"error": "No content found for this chapter range"}
@@ -532,10 +622,11 @@ async def summarize(request: SummarizeRequest):
                        for r in results]
 
         # A failed generation is a failure, not a summary: it raises, and is never cached.
-        words, max_tokens = _recap_length(end_ch - request.start_chapter + 1)
+        first = covered[0] if covered else request.start_chapter
+        words, max_tokens = _recap_length(end_ch - first + 1)
         gen_data, _ = await _generate_checked(client, {
             "query": (
-                f"Recap chapters {request.start_chapter} to {end_ch} in about {words} words: "
+                f"Recap chapters {first} to {end_ch} in about {words} words: "
                 f"the key events, in chapter order, a sentence or two for each chapter, giving "
                 f"the last chapters as much room as the first."
             ),
@@ -547,6 +638,7 @@ async def summarize(request: SummarizeRequest):
     summary = gen_data.get("answer") or ""
     if not summary:
         raise HTTPException(status_code=502, detail="Generation returned no summary")
+    summary += _recap_note((request.start_chapter, end_ch), covered)
 
     def cache_summary():
         with engine.connect() as conn:
@@ -569,6 +661,7 @@ async def summarize(request: SummarizeRequest):
         "end_chapter": end_ch,
         "cached": False,
         "source": source,
+        "covered": list(covered) if covered else None,
     }
 
 
@@ -600,6 +693,10 @@ async def catch_me_up(request: CatchMeUpRequest):
         current_chapter=current_chapter,
         use_cache=request.use_cache,
     ))
+    if "error" in summary_resp:
+        # passed on: it used to come back as an empty recap
+        return {"user_id": request.user_id, "current_chapter": current_chapter,
+                "error": summary_resp["error"]}
 
     # Get characters introduced in this range
     async with httpx.AsyncClient(timeout=10) as client:
@@ -607,6 +704,7 @@ async def catch_me_up(request: CatchMeUpRequest):
             f"{RETRIEVAL_SERVICE_URL}/characters",
             params={"novel_id": request.novel_id, "current_chapter": current_chapter},
         )
+    _check(chars_resp, "Retrieval")
     all_chars = chars_resp.json()
     recent_chars = [c for c in all_chars if c.get("first_appearance", 0) >= start]
 

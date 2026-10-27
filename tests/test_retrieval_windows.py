@@ -78,3 +78,25 @@ def test_chunks_stored_before_windows_still_work(retrieval_search, store):
     store(1, 0, ["A whole chunk with the alpha clue."], window_index=False)
 
     assert search(retrieval_search, "alpha")[0]["text"] == "A whole chunk with the alpha clue."
+
+
+def test_deleting_a_collection_says_whether_there_was_one(retrieval_search, monkeypatch):
+    client = chromadb.EphemeralClient()
+    name = f"gone_{uuid.uuid4().hex}"
+    client.create_collection(name, embedding_function=KeywordEmbedding())
+    monkeypatch.setattr(retrieval_search, "_get_client", lambda: client)
+
+    assert retrieval_search.delete_collection(name) == "deleted"
+    assert retrieval_search.delete_collection(name) == "absent"
+
+
+def test_a_failed_deletion_is_an_error_not_an_absent_collection(retrieval_search, monkeypatch):
+    class Broken:
+        def delete_collection(self, name):
+            raise ConnectionError("chroma is down")
+
+    monkeypatch.setattr(retrieval_search, "_get_client", lambda: Broken())
+
+    with pytest.raises(ConnectionError):
+        retrieval_search.delete_collection("novel_7")
+

@@ -103,7 +103,7 @@ def _windows(chunks: list[str]) -> list[tuple[int, int, str]]:
     embedded and searched: the model reads only the first 256 tokens of a text, about half of
     a chunk. A search returns the chunks its best windows belong to (retrieval's search.py)."""
     return [(i, j, window) for i, chunk in enumerate(chunks)
-            for j, window in enumerate(split_windows(chunk, WINDOW_SIZE))]
+            for j, window in enumerate(split_windows(chunk, WINDOW_SIZE, _window_fits))]
 
 
 # Windows are embedded EMBED_GROUP chapters at a time: one chapter at a time, 300 chapters took
@@ -111,16 +111,32 @@ def _windows(chunks: list[str]) -> list[tuple[int, int, str]]:
 # identical either way: the model pads every text to the same length.
 EMBED_GROUP = 32
 _embedder = None
+_tokenizer = None
+
+
+def _get_embedder():
+    """The pinned embedding model, the same one the collections use."""
+    global _embedder
+    if _embedder is None:
+        _embedder = embedding_function()
+    return _embedder
 
 
 def _embed(texts: list[str]) -> list:
-    """Vectors from the pinned model, the same one the collections use."""
-    global _embedder
-    if not texts:
-        return []
-    if _embedder is None:
-        _embedder = embedding_function()
-    return list(_embedder(texts))
+    return list(_get_embedder()(texts)) if texts else []
+
+
+def _window_fits(text: str) -> bool:
+    """Whether the embedding model reads `text` whole. It reads at most 256 tokens, [CLS] and
+    [SEP] included, and drops the rest without a word. 170 words nearly always fit, but 47 of
+    Shadow Slave's 28,751 windows ran over (names and curly quotes take extra tokens), so this
+    asks the model's own tokenizer, which truncates exactly as the model does."""
+    global _tokenizer
+    if _tokenizer is None:
+        embedder = _get_embedder()
+        embedder(["warm up"])  # downloads the model on first use; the tokenizer comes with it
+        _tokenizer = embedder.tokenizer
+    return not _tokenizer.encode(text).overflowing
 
 
 def _process_chapter(chapter_data: dict, extract_entities: bool = False,
